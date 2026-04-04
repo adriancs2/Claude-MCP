@@ -18,6 +18,8 @@ A unified MCP (Model Context Protocol) server that gives Claude Desktop 60 tools
 - [Building a Web Server from Scratch in C#
 ](https://adriancs.com/building-a-web-server-from-scratch-in-csharp/)
 
+---
+
 ## Why This Exists
 
 Claude Desktop's built-in file tools are limited. You can't:
@@ -29,7 +31,7 @@ Claude Desktop's built-in file tools are limited. You can't:
 - Execute MySQL queries
 - Run shell commands and get the output back
 
-MCP2 solves all of that with 69 tools in a single executable.
+MCP2 solves all of that with 60 tools in a single executable.
 
 ---
 
