@@ -15,6 +15,19 @@ namespace MCP2.Services
     public static class FileOperations
     {
         private const string LineEnding = "\r\n";
+
+        /// <summary>
+        /// Normalizes all line endings (\n, \r, \r\n) to \r\n.
+        /// This ensures consistent matching between file content and incoming patterns
+        /// from Claude, which may use either \n or \r\n inconsistently.
+        /// </summary>
+        public static string NormalizeLineEndings(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            // First replace \r\n with \n to avoid doubling, then replace lone \r, then \n -> \r\n
+            return text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
+        }
+
         
         // UTF-8 encoding without BOM (Byte Order Mark) - default for new files
         private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
@@ -227,7 +240,7 @@ namespace MCP2.Services
                 return GetBinaryFileInfo(path);
             }
             
-            return File.ReadAllText(path, Encoding.UTF8);
+            return NormalizeLineEndings(File.ReadAllText(path, Encoding.UTF8));
         }
 
         /// <summary>
@@ -440,7 +453,7 @@ namespace MCP2.Services
                 Directory.CreateDirectory(directory);
 
             var encoding = useBom ? Utf8WithBom : Utf8NoBom;
-            File.WriteAllText(path, content, encoding);
+            File.WriteAllText(path, NormalizeLineEndings(content), encoding);
         }
 
 
@@ -451,7 +464,7 @@ namespace MCP2.Services
         {
             ValidateFileExists(path);
 
-            File.AppendAllText(path, content, GetWriteEncoding(path));
+            File.AppendAllText(path, NormalizeLineEndings(content), GetWriteEncoding(path));
         }
 
         #endregion
@@ -475,7 +488,7 @@ namespace MCP2.Services
             if (lineNum > lines.Length)
                 return string.Format("Line {0} is beyond end of file (file has {1} lines). No changes made.", lineNum, lines.Length);
 
-            lines[lineNum - 1] = newContent;
+            lines[lineNum - 1] = NormalizeLineEndings(newContent);
             File.WriteAllText(path, string.Join(LineEnding, lines), encoding);
             return null;
         }
@@ -507,7 +520,7 @@ namespace MCP2.Services
             lines.RemoveRange(startLine - 1, endLine - startLine + 1);
 
             // Insert new content
-            var newLines = newContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            var newLines = NormalizeLineEndings(newContent).Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             lines.InsertRange(startLine - 1, newLines);
 
             File.WriteAllText(path, string.Join(LineEnding, lines), encoding);
@@ -537,7 +550,7 @@ namespace MCP2.Services
                 lineNum = lines.Count + 1;
             }
 
-            var newLines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            var newLines = NormalizeLineEndings(content).Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             lines.InsertRange(lineNum - 1, newLines);
 
             File.WriteAllText(path, string.Join(LineEnding, lines), encoding);
@@ -567,7 +580,7 @@ namespace MCP2.Services
                 lineNum = lines.Count;
             }
 
-            var newLines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            var newLines = NormalizeLineEndings(content).Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             lines.InsertRange(lineNum, newLines);
 
             File.WriteAllText(path, string.Join(LineEnding, lines), encoding);
@@ -622,7 +635,9 @@ namespace MCP2.Services
                 throw new ArgumentException("N must be >= 1");
 
             var encoding = GetWriteEncoding(path);
-            var content = File.ReadAllText(path, encoding);
+            var content = NormalizeLineEndings(File.ReadAllText(path, encoding));
+            pattern = NormalizeLineEndings(pattern);
+            replacement = NormalizeLineEndings(replacement);
             var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
             var index = -1;
@@ -660,6 +675,8 @@ namespace MCP2.Services
                 throw new ArgumentException("End line must be >= start line");
 
             var encoding = GetWriteEncoding(path);
+            pattern = NormalizeLineEndings(pattern);
+            replacement = NormalizeLineEndings(replacement);
             var lines = File.ReadAllLines(path, encoding);
 
             if (startLine > lines.Length)
@@ -689,7 +706,8 @@ namespace MCP2.Services
                 throw new ArgumentException("Pattern cannot be empty");
 
             var encoding = GetWriteEncoding(path);
-            var content = File.ReadAllText(path, encoding);
+            var content = NormalizeLineEndings(File.ReadAllText(path, encoding));
+            replacement = NormalizeLineEndings(replacement);
 
             try
             {
@@ -714,7 +732,9 @@ namespace MCP2.Services
                 throw new ArgumentException("Pattern cannot be empty");
 
             var encoding = GetWriteEncoding(path);
-            var content = File.ReadAllText(path, encoding);
+            var content = NormalizeLineEndings(File.ReadAllText(path, encoding));
+            pattern = NormalizeLineEndings(pattern);
+            replacement = NormalizeLineEndings(replacement);
 
             if (caseSensitive)
                 content = content.Replace(pattern, replacement);
@@ -735,7 +755,9 @@ namespace MCP2.Services
                 throw new ArgumentException("Pattern cannot be empty");
 
             var encoding = GetWriteEncoding(path);
-            var content = File.ReadAllText(path, encoding);
+            var content = NormalizeLineEndings(File.ReadAllText(path, encoding));
+            pattern = NormalizeLineEndings(pattern);
+            replacement = NormalizeLineEndings(replacement);
             var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
             var index = content.IndexOf(pattern, comparison);
@@ -789,7 +811,9 @@ namespace MCP2.Services
                 throw new ArgumentException("Pattern cannot be empty");
 
             var encoding = GetWriteEncoding(path);
-            var content = File.ReadAllText(path, encoding);
+            var content = NormalizeLineEndings(File.ReadAllText(path, encoding));
+            pattern = NormalizeLineEndings(pattern);
+            replacement = NormalizeLineEndings(replacement);
 
             // Count occurrences first
             int count = 0;
@@ -825,7 +849,9 @@ namespace MCP2.Services
                 throw new ArgumentException("Pattern cannot be empty");
 
             var encoding = GetWriteEncoding(path);
-            var content = File.ReadAllText(path, encoding);
+            var content = NormalizeLineEndings(File.ReadAllText(path, encoding));
+            pattern = NormalizeLineEndings(pattern);
+            replacement = NormalizeLineEndings(replacement);
             var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
             var index = content.IndexOf(pattern, comparison);
@@ -858,7 +884,8 @@ namespace MCP2.Services
             if (string.IsNullOrEmpty(pattern))
                 throw new ArgumentException("Pattern cannot be empty");
 
-            var content = File.ReadAllText(path, Encoding.UTF8);
+            var content = NormalizeLineEndings(File.ReadAllText(path, Encoding.UTF8));
+            pattern = NormalizeLineEndings(pattern);
             var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
             int count = 0;

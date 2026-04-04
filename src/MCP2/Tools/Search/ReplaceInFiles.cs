@@ -49,6 +49,10 @@ namespace MCP2.Tools.Search
                 return ToolResult.Error("INVALID_PARAMS", "Missing 'replace_text' parameter");
 
             
+            // Normalize line endings for consistent matching
+            findText = FileOperations.NormalizeLineEndings(findText);
+            replaceText = FileOperations.NormalizeLineEndings(replaceText);
+
 
             if (!System.IO.Directory.Exists(path))
                 return ToolResult.Error(string.Format("Directory not found: {0}", path));
@@ -145,7 +149,7 @@ namespace MCP2.Tools.Search
                 try
                 {
                     Encoding encoding = Encoding.UTF8;
-                    string content = System.IO.File.ReadAllText(filePath, encoding);
+                    string content = FileOperations.NormalizeLineEndings(System.IO.File.ReadAllText(filePath, encoding));
 
                     // Count occurrences
                     int count = 0;
