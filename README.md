@@ -5,7 +5,7 @@ A unified MCP (Model Context Protocol) server that gives Claude Desktop 60 tools
 ![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.8-purple)
 ![C#](https://img.shields.io/badge/C%23-7.3-blue)
 ![License](https://img.shields.io/badge/license-Unlicense-green)
-![Tools](https://img.shields.io/badge/tools-69-orange)
+![Tools](https://img.shields.io/badge/tools-60-orange)
 
 > **Note:** This is designed for **Claude Desktop** on Windows. Claude Code already has built-in tools that cover most of this functionality — though if you use Claude Code and need MySQL tools, you can extract that section from this project.
 
@@ -29,8 +29,6 @@ Claude Desktop's built-in file tools are limited. You can't:
 - Replace a block of code with content-matching safety (like `str_replace`, but better)
 - Execute MySQL queries
 - Run shell commands and get the output back
-
-MCP2 solves all of that with 60 tools in a single executable.
 
 ---
 
@@ -93,7 +91,7 @@ The tools will appear in Claude Desktop's tool list. Ask Claude to `list_directo
 
 ---
 
-## What's In the Box (60 Tools)
+## What's In the Box
 
 ### File Operations (13 tools)
 
@@ -222,7 +220,7 @@ Adding a new tool: implement `ITool` in a new `.cs` file under `Tools/`. It's au
 
 ## System Prompt
 
-The `system-prompts.txt` file contains the complete tool reference documentation. You can paste it into Claude Desktop's system prompt (or a Claude Project's instructions) to give Claude full awareness of all 69 tools, their parameters, and usage patterns.
+The `system-prompts.txt` file contains the complete tool reference documentation. You can paste it into Claude Desktop's system prompt (or a Claude Project's instructions) to give Claude full awareness of all tools, their parameters, and usage patterns.
 
 ---
 
