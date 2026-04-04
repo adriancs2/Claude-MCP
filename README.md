@@ -15,8 +15,7 @@ A unified MCP (Model Context Protocol) server that gives Claude Desktop 60 tools
 
 - [Documentation: Writing MCP Tools in C# (.NET Framework) for Claude Desktop/Code
 ](https://adriancs.com/documentation-writing-mcp-tools-in-c-net-framework-for-claude-desktop-code/)
-- [Building a Web Server from Scratch in C#
-](https://adriancs.com/building-a-web-server-from-scratch-in-csharp/)
+- [Building a Self-Improving MCP Server Tool for Claude Desktop in C# (Console App)](https://adriancs.com/building-a-self-improving-mcp-server-tool-for-claude-desktop-in-c-console-app/)
 
 ---
 
