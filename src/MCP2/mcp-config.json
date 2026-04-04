@@ -1,0 +1,6 @@
+{
+  "mysql_connection_string": "Server=localhost;User=root;Password=1234;convertzerodatetime=true;treattinyasboolean=true;",
+  "gc_memory_threshold_mb": 150,
+  "debug_logging": true,
+  "backup_directory": null
+}

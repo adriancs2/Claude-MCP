@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{00A6FEE1-B1BD-460F-9EAB-6D2B858BD34B}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MCP2</RootNamespace>
+    <AssemblyName>MCP2</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=8.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Bcl.AsyncInterfaces.8.0.0\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.DependencyInjection.Abstractions, Version=8.0.0.2, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Extensions.DependencyInjection.Abstractions.8.0.2\lib\net462\Microsoft.Extensions.DependencyInjection.Abstractions.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Logging.Abstractions, Version=8.0.0.2, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Extensions.Logging.Abstractions.8.0.2\lib\net462\Microsoft.Extensions.Logging.Abstractions.dll</HintPath>
+    </Reference>
+    <Reference Include="MySqlConnector, Version=2.0.0.0, Culture=neutral, PublicKeyToken=d33d3e53aa5f8c92, processorArchitecture=MSIL">
+      <HintPath>..\packages\MySqlConnector.2.5.0\lib\net48\MySqlConnector.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.13.0.4\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Buffers, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Buffers.4.5.1\lib\net461\System.Buffers.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Core" />
+    <Reference Include="System.Diagnostics.DiagnosticSource, Version=8.0.0.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Diagnostics.DiagnosticSource.8.0.1\lib\net462\System.Diagnostics.DiagnosticSource.dll</HintPath>
+    </Reference>
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Management" />
+    <Reference Include="System.Memory, Version=4.0.1.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Memory.4.5.5\lib\net461\System.Memory.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Numerics.Vectors, Version=4.1.4.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Numerics.Vectors.4.5.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Runtime.CompilerServices.Unsafe.6.0.0\lib\net461\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.0.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Threading.Tasks.Extensions.4.5.4\lib\net461\System.Threading.Tasks.Extensions.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Transactions" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Core\CallerValidator.cs" />
+    <Compile Include="Core\ITool.cs" />
+    <Compile Include="Core\JsonRpcModels.cs" />
+    <Compile Include="Core\McpConfig.cs" />
+    <Compile Include="Core\McpModels.cs" />
+    <Compile Include="Core\ToolDiscovery.cs" />
+    <Compile Include="Core\ToolResult.cs" />
+    <Compile Include="McpServer.cs" />
+    <Compile Include="Program.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Services\BackupService.cs" />
+    <Compile Include="Services\FileOperations.cs" />
+    <Compile Include="Services\HttpService.cs" />
+    <Compile Include="Services\MySqlService.cs" />
+    <Compile Include="Tools\Backup\BackupFile.cs" />
+    <Compile Include="Tools\Backup\ClearBackups.cs" />
+    <Compile Include="Tools\Backup\CompareFiles.cs" />
+    <Compile Include="Tools\Backup\DiffPreview.cs" />
+    <Compile Include="Tools\Backup\ListBackups.cs" />
+    <Compile Include="Tools\Backup\UndoLastEdit.cs" />
+    <Compile Include="Tools\BatchRead\BatchReadFiles.cs" />
+    <Compile Include="Tools\BatchRead\BatchReadFilesRanges.cs" />
+    <Compile Include="Tools\Directory\BatchCopyFiles.cs" />
+    <Compile Include="Tools\Directory\CopyDirectory.cs" />
+    <Compile Include="Tools\Directory\CreateDirectory.cs" />
+    <Compile Include="Tools\Directory\DeleteDirectory.cs" />
+    <Compile Include="Tools\Directory\ListAllowedDirectories.cs" />
+    <Compile Include="Tools\Directory\ListDirectory.cs" />
+    <Compile Include="Tools\Directory\MoveDirectory.cs" />
+    <Compile Include="Tools\FileEdit\BatchEdit.cs" />
+    <Compile Include="Tools\FileEdit\Delete.cs" />
+    <Compile Include="Tools\FileEdit\EditNthOccurrence.cs" />
+    <Compile Include="Tools\FileEdit\InsertAfter.cs" />
+    <Compile Include="Tools\FileEdit\InsertAt.cs" />
+    <Compile Include="Tools\FileEdit\Replace.cs" />
+    <Compile Include="Tools\FileEdit\ReplaceAll.cs" />
+    <Compile Include="Tools\FileEdit\ReplaceFirst.cs" />
+    <Compile Include="Tools\FileEdit\ReplaceInLineRange.cs" />
+    <Compile Include="Tools\FileEdit\ReplaceLineRange.cs" />
+    <Compile Include="Tools\FileEdit\ReplaceRegex.cs" />
+    <Compile Include="Tools\File\AppendToFile.cs" />
+    <Compile Include="Tools\File\CopyFile.cs" />
+    <Compile Include="Tools\File\CountLines.cs" />
+    <Compile Include="Tools\File\DeleteFile.cs" />
+    <Compile Include="Tools\File\FileExists.cs" />
+    <Compile Include="Tools\File\FindAllOccurrences.cs" />
+    <Compile Include="Tools\File\FindPattern.cs" />
+    <Compile Include="Tools\File\GetFileInfo.cs" />
+    <Compile Include="Tools\File\MoveFile.cs" />
+    <Compile Include="Tools\File\ReadFile.cs" />
+    <Compile Include="Tools\File\ReadFileLines.cs" />
+    <Compile Include="Tools\File\ReadLineRange.cs" />
+    <Compile Include="Tools\File\WriteFile.cs" />
+    <Compile Include="Tools\Http\HttpGet.cs" />
+    <Compile Include="Tools\Http\HttpPost.cs" />
+    <Compile Include="Tools\Http\HttpRequest.cs" />
+    <Compile Include="Tools\Image\ViewImage.cs" />
+    <Compile Include="Tools\MySql\BatchMySqlQueries.cs" />
+    <Compile Include="Tools\MySql\BatchMySqlQueriesWithVars.cs" />
+    <Compile Include="Tools\MySql\BatchMySqlSchema.cs" />
+    <Compile Include="Tools\MySql\MySqlExecute.cs" />
+    <Compile Include="Tools\MySql\MySqlScalar.cs" />
+    <Compile Include="Tools\MySql\MySqlSchema.cs" />
+    <Compile Include="Tools\MySql\MySqlSelect.cs" />
+    <Compile Include="Tools\MySql\MySqlTest.cs" />
+    <Compile Include="Tools\Search\FindInFiles.cs" />
+    <Compile Include="Tools\Search\ReplaceInFiles.cs" />
+    <Compile Include="Tools\Shell\RunCommand.cs" />
+    <Compile Include="Tools\Zip\ExtractZip.cs" />
+    <Compile Include="Tools\Zip\ExtractZipContent.cs" />
+    <Compile Include="Tools\Zip\ListZipContents.cs" />
+    <Compile Include="Tools\Zip\ZipFileTool.cs" />
+    <Compile Include="Tools\Zip\ZipFolderTool.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+    <None Include="mcp-config.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="system-prompts.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
