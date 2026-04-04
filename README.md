@@ -1,6 +1,6 @@
 # MCP2 — Enhanced MCP Tool Server for Claude Desktop
 
-A unified MCP (Model Context Protocol) server that gives Claude Desktop 69 tools for file operations, code editing, shell commands, database access, document processing, HTTP requests, and more. Built as a single .NET Framework 4.8 console application.
+A unified MCP (Model Context Protocol) server that gives Claude Desktop 60 tools for file operations, code editing, shell commands, database access, document processing, HTTP requests, and more. Built as a single .NET Framework 4.8 console application.
 
 ![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.8-purple)
 ![C#](https://img.shields.io/badge/C%23-7.3-blue)
@@ -10,6 +10,13 @@ A unified MCP (Model Context Protocol) server that gives Claude Desktop 69 tools
 > **Note:** This is designed for **Claude Desktop** on Windows. Claude Code already has built-in tools that cover most of this functionality — though if you use Claude Code and need MySQL tools, you can extract that section from this project.
 
 ---
+
+## Documentation - How to Build MCP in C# Console App
+
+- [Documentation: Writing MCP Tools in C# (.NET Framework) for Claude Desktop/Code
+](https://adriancs.com/documentation-writing-mcp-tools-in-c-net-framework-for-claude-desktop-code/)
+- [Building a Web Server from Scratch in C#
+](https://adriancs.com/building-a-web-server-from-scratch-in-csharp/)
 
 ## Why This Exists
 
