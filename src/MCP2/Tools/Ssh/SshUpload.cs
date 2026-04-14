@@ -54,7 +54,7 @@ namespace MCP2.Tools.Ssh
             // Validate all local paths exist
             foreach (var p in localPaths)
             {
-                if (!File.Exists(p) && !Directory.Exists(p))
+                if (!System.IO.File.Exists(p) && !System.IO.Directory.Exists(p))
                     return ToolResult.Error("PATH_NOT_FOUND", $"Local path not found: {p}");
             }
 
@@ -81,10 +81,10 @@ namespace MCP2.Tools.Ssh
 
                     foreach (var localPath in localPaths)
                     {
-                        if (File.Exists(localPath))
+                        if (System.IO.File.Exists(localPath))
                         {
                             // Single file
-                            string fileName = Path.GetFileName(localPath);
+                            string fileName = System.IO.Path.GetFileName(localPath);
                             string remotePath = destination + fileName;
 
                             try
@@ -98,10 +98,10 @@ namespace MCP2.Tools.Ssh
                                 errors.Add($"  {localPath} -> {ex.Message}");
                             }
                         }
-                        else if (Directory.Exists(localPath))
+                        else if (System.IO.Directory.Exists(localPath))
                         {
                             // Directory — upload recursively
-                            string dirName = Path.GetFileName(localPath.TrimEnd('\\', '/'));
+                            string dirName = System.IO.Path.GetFileName(localPath.TrimEnd('\\', '/'));
                             string remoteDir = destination + dirName;
 
                             try
@@ -162,7 +162,7 @@ namespace MCP2.Tools.Ssh
                 catch (Renci.SshNet.Common.SftpPathNotFoundException) { }
             }
 
-            using (var fs = File.OpenRead(localPath))
+            using (var fs = System.IO.File.OpenRead(localPath))
             {
                 sftp.UploadFile(fs, remotePath, true);
                 return fs.Length;
@@ -177,9 +177,9 @@ namespace MCP2.Tools.Ssh
             result.Dirs++;
 
             // Upload files in this directory
-            foreach (var filePath in Directory.GetFiles(localDir))
+            foreach (var filePath in System.IO.Directory.GetFiles(localDir))
             {
-                string fileName = Path.GetFileName(filePath);
+                string fileName = System.IO.Path.GetFileName(filePath);
                 string remotePath = remoteDir + "/" + fileName;
 
                 try
@@ -195,9 +195,9 @@ namespace MCP2.Tools.Ssh
             }
 
             // Recurse into subdirectories
-            foreach (var subDir in Directory.GetDirectories(localDir))
+            foreach (var subDir in System.IO.Directory.GetDirectories(localDir))
             {
-                string dirName = Path.GetFileName(subDir);
+                string dirName = System.IO.Path.GetFileName(subDir);
                 string remoteSubDir = remoteDir + "/" + dirName;
 
                 var subResult = UploadDirectory(sftp, subDir, remoteSubDir, overwrite);

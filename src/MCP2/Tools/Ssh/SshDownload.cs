@@ -52,8 +52,8 @@ namespace MCP2.Tools.Ssh
                 return ToolResult.Error("PROFILE_ERROR", profileError);
 
             // Ensure local destination exists
-            if (!Directory.Exists(destination))
-                Directory.CreateDirectory(destination);
+            if (!System.IO.Directory.Exists(destination))
+                System.IO.Directory.CreateDirectory(destination);
 
             int fileCount = 0;
             int dirCount = 0;
@@ -80,7 +80,7 @@ namespace MCP2.Tools.Ssh
                             {
                                 // Download directory recursively
                                 string dirName = GetRemoteFileName(normalizedRemote);
-                                string localDir = Path.Combine(destination, dirName);
+                                string localDir = System.IO.Path.Combine(destination, dirName);
 
                                 var result = DownloadDirectory(sftp, normalizedRemote, localDir, overwrite);
                                 fileCount += result.Files;
@@ -92,7 +92,7 @@ namespace MCP2.Tools.Ssh
                             {
                                 // Download single file
                                 string fileName = GetRemoteFileName(normalizedRemote);
-                                string localPath = Path.Combine(destination, fileName);
+                                string localPath = System.IO.Path.Combine(destination, fileName);
 
                                 try
                                 {
@@ -143,15 +143,15 @@ namespace MCP2.Tools.Ssh
 
         private long DownloadFile(SftpClient sftp, string remotePath, string localPath, bool overwrite)
         {
-            if (!overwrite && File.Exists(localPath))
+            if (!overwrite && System.IO.File.Exists(localPath))
                 return 0;
 
             // Ensure local directory exists
-            string dir = Path.GetDirectoryName(localPath);
-            if (!Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
+            string dir = System.IO.Path.GetDirectoryName(localPath);
+            if (!System.IO.Directory.Exists(dir))
+                System.IO.Directory.CreateDirectory(dir);
 
-            using (var fs = File.Create(localPath))
+            using (var fs = System.IO.File.Create(localPath))
             {
                 sftp.DownloadFile(remotePath, fs);
                 return fs.Length;
@@ -162,8 +162,8 @@ namespace MCP2.Tools.Ssh
         {
             var result = new DownloadResult();
 
-            if (!Directory.Exists(localDir))
-                Directory.CreateDirectory(localDir);
+            if (!System.IO.Directory.Exists(localDir))
+                System.IO.Directory.CreateDirectory(localDir);
             result.Dirs++;
 
             // List remote directory contents
@@ -174,7 +174,7 @@ namespace MCP2.Tools.Ssh
                     continue;
 
                 string remotePath = remoteDir + "/" + entry.Name;
-                string localPath = Path.Combine(localDir, entry.Name);
+                string localPath = System.IO.Path.Combine(localDir, entry.Name);
 
                 if (entry.IsDirectory)
                 {
