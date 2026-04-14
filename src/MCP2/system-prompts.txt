@@ -1,6 +1,6 @@
 # MCP2 — Enhanced Development Tools
 
-MCP2 is a unified MCP server providing 69 tools for file system operations, code editing, database access, document processing, HTTP requests, compression, image viewing, and shell command execution. It runs as a single .NET Framework 4.8 console application communicating via JSON-RPC 2.0 over stdin/stdout.
+MCP2 is a unified MCP server providing 90+ tools for file system operations, code editing, database access, SSH remote access, project building, HTTP requests, compression, image viewing, and shell command execution. It runs as a single .NET Framework 4.8 console application communicating via JSON-RPC 2.0 over stdin/stdout.
 
 ## Configuration
 
@@ -10,10 +10,11 @@ All settings are in `mcp-config.json` next to the executable:
 - `gc_memory_threshold_mb` — Working set threshold (MB) to trigger full GC. Default: 150.
 - `debug_logging` — Enable debug log file (`mcp_debug.log`). Default: false.
 - `backup_directory` — Custom backup folder. Default: `./backups` next to exe.
+- `ssh_profiles` — Named SSH connection profiles (see SSH Tools section).
 
 ---
 
-## Tool Reference (60 tools)
+## Tool Reference
 
 ### File Operations (13 tools)
 
@@ -364,13 +365,185 @@ Uses built-in System.IO.Compression.
 
 ### Shell Tools (1 tool)
 
-**run_command** — Execute an external program (cmd, powershell, or any executable) and return the output. stdout and stderr are captured directly in C# via stream redirection (not shell redirection), so output is always returned reliably. For single-line commands, pass program + parameters. For multi-line PowerShell scripts, write a .ps1 file first and pass it via script_path. ESCAPING NOTE: For PowerShell, the parameters string is wrapped in double quotes and passed via -Command. Only inner double quotes are escaped (doubled). If your command contains $variables, backticks, or complex quoting, write a .ps1 file and use script_path instead — this avoids all escaping issues.
-- `program` (string, required): Filename or full path to the executable (e.g., "powershell", "cmd", "ipconfig", "pnputil")
-- `parameters` (string): Command-line arguments for single-line execution. For PowerShell, do NOT include `-Command` or `-File` — just pass the command string directly. IMPORTANT: Only inner double quotes are escaped. If your command uses $variables, backticks, or complex quoting, use script_path instead.
-- `script_path` (string): Full path to a script file (e.g., .ps1) to execute. Use this for multi-line PowerShell scripts instead of inline parameters. `-NoProfile -ExecutionPolicy Bypass` is applied automatically. This is the PREFERRED approach for any PowerShell command containing $variables, backticks, single quotes, or complex expressions — it bypasses all escaping issues.
-- `report_log` (string): Optional path to save a copy of the captured output. If omitted, output is still fully returned — no log file needed. Auto-generated temp files are deleted after reading.
+**run_command** — Execute an external program (cmd, powershell, or any executable) and return captured stdout + stderr. Output is captured via C# stream redirection, so it is always returned reliably regardless of shell.
+
+Three ways to run PowerShell (in order of preference):
+
+1. **`script`** (PREFERRED) — Paste inline script content directly, multi-line supported. Auto-written to a temp .ps1 file, executed with `-NoProfile -ExecutionPolicy Bypass`, temp file deleted after execution. No escaping needed. Use this for anything with `$variables`, backticks, pipelines, loops, or multi-line logic.
+2. **`script_path`** — Point to an existing .ps1 file on disk. Same execution flags applied automatically. Use when the script already exists as a file.
+3. **`parameters`** — For trivial single-line commands only (e.g., `Get-Date`, `ls`). Wrapped in `-Command "..."` with inner double quotes escaped. Avoid for anything containing `$variables` or complex quoting.
+
+For non-PowerShell programs, use `program` + `parameters` (e.g., `program: "ipconfig"`, `parameters: "/all"`).
+
+Parameters:
+- `program` (string, required): Filename or full path to the executable (e.g., "powershell", "cmd", "ipconfig", "mysqld.exe")
+- `parameters` (string): Command-line arguments for single-line execution. For PowerShell, do NOT include `-Command` or `-File` — just the command string.
+- `script` (string): Inline script content (multi-line supported). For PowerShell: auto-written to a temp .ps1 file, executed, then deleted. For cmd: auto-written to a temp .bat file, then deleted. No escaping needed — just paste your script code directly.
+- `script_path` (string): Full path to an existing script file (e.g., .ps1) on disk. Use `script` instead if you want to pass the script content inline.
+- `report_log` (string): Optional path to save a copy of the captured output. If omitted, output is still fully returned — no log file needed.
+- `working_directory` (string): Working directory for the process. If not specified, inherits from the MCP2 server process.
 - `wait_for_exit` (boolean): Wait for the process to finish before returning. Default: true. Set to false for fire-and-forget processes.
-- `timeout_seconds` (integer): Maximum seconds to wait before killing the process. Default: 30. Increase for long-running operations (e.g., installs, builds).
+- `timeout_seconds` (integer): Maximum seconds to wait before killing the process. Default: 30. Increase for long-running operations (e.g., builds, installs, database init).
+
+Timeout behavior: If the process exceeds `timeout_seconds`, it is killed and the response includes any partial stdout/stderr captured before the timeout (capped at 20KB each). This ensures you always get diagnostic output even when a process hangs.
+
+Usage examples:
+
+```
+// Simple: run an executable directly
+program: "ipconfig"
+parameters: "/all"
+
+// PowerShell one-liner via parameters
+program: "powershell"
+parameters: "Get-Service MySQL_Main"
+
+// PowerShell multi-line via script (PREFERRED)
+program: "powershell"
+script: |
+  $svc = Get-Service MySQL_Main -ErrorAction SilentlyContinue
+  if ($svc.Status -eq 'Running') {
+      Write-Host "MySQL is running (PID: $($svc.ServiceHandle))"
+  } else {
+      Write-Host "MySQL is stopped"
+      Start-Service MySQL_Main
+      Write-Host "Started MySQL"
+  }
+timeout_seconds: 15
+
+// Run an existing .ps1 file
+program: "powershell"
+script_path: "D:\\scripts\\deploy.ps1"
+timeout_seconds: 120
+
+// CMD batch
+program: "cmd"
+parameters: "dir /s /b *.cs"
+working_directory: "D:\\projects\\myapp"
+
+// Direct executable
+program: "D:\\mysql\\server_main\\bin\\mysql.exe"
+parameters: "-u root -p1234 -e \"SELECT VERSION();\""
+```
+
+---
+
+### Build Tools (1 tool)
+
+**msbuild** — Build .NET Framework projects (.csproj, .sln, .slnx) using MSBuild. Auto-discovers MSBuild.exe from the latest installed Visual Studio — no configuration needed. Scans `C:\Program Files\Microsoft Visual Studio\{version}\{edition}\MSBuild\Current\Bin\MSBuild.exe`, picks the highest version, and caches the path for the process lifetime.
+- `project` (string, required): Full path to the .csproj, .sln, or .slnx file to build
+- `target` (string enum): MSBuild target — "Build" (default), "Rebuild", "Clean", "Restore"
+- `configuration` (string enum): Build configuration — "Debug" (default), "Release"
+- `verbosity` (string enum): Output verbosity — "quiet", "minimal" (default), "normal", "detailed", "diagnostic"
+- `timeout_seconds` (integer): Maximum seconds to wait for the build. Default: 120
+
+Usage examples:
+
+```
+// Build a project (Debug)
+project: "D:\\projects\\MyApp\\MyApp.csproj"
+
+// Build a solution (Release)
+project: "D:\\projects\\MyApp\\MyApp.sln"
+configuration: "Release"
+
+// Rebuild (clean + build)
+project: "D:\\projects\\MyApp\\MyApp.csproj"
+target: "Rebuild"
+
+// NuGet restore
+project: "D:\\projects\\MyApp\\MyApp.csproj"
+target: "Restore"
+```
+
+---
+
+### SSH Tools (5 tools)
+
+SSH tools use named profiles defined in `mcp-config.json` under `ssh_profiles`. Credentials are stored in the config file — never passed as tool parameters.
+
+**Profile configuration** in `mcp-config.json`:
+
+```json
+{
+  "ssh_profiles": {
+    "myserver": {
+      "host": "192.168.1.100",
+      "port": 22,
+      "username": "admin",
+      "password": "your-password"
+    },
+    "myvps": {
+      "host": "vps.example.com",
+      "port": 22,
+      "username": "root",
+      "private_key_path": "C:\\Users\\you\\.ssh\\id_rsa",
+      "passphrase": ""
+    }
+  }
+}
+```
+
+#### Interactive Shell (3 tools)
+
+For interactive, stateful remote sessions. The shell is persistent — environment variables, working directory (`cd`), and other state carry over between `ssh_send` calls.
+
+**ssh_open** — Open a persistent SSH connection using a named profile. The profile name becomes the session identifier for subsequent ssh_send and ssh_close calls.
+- `profile` (string, required): SSH profile name from mcp-config.json
+
+**ssh_send** — Send a command to an open SSH session and return the output. The session must be opened first with ssh_open.
+- `command` (string, required): Shell command to execute on the remote server
+- `profile` (string): Which session (profile name) to send to. Default: "default"
+- `timeout_ms` (integer): Maximum milliseconds to wait for output. Default: 10000. Increase for slow commands. Max: 120000.
+
+**ssh_close** — Close an open SSH session and release resources.
+- `profile` (string): Which session to close. Default: "default". Use "all" to close every open session.
+
+Usage examples:
+
+```
+// Open connection
+ssh_open: profile: "myserver"
+
+// Run commands (state persists between calls)
+ssh_send: profile: "myserver", command: "cd /var/www && ls -la"
+ssh_send: profile: "myserver", command: "pwd"  // still in /var/www
+
+// Close when done
+ssh_close: profile: "myserver"
+```
+
+#### File Transfer (2 tools)
+
+For uploading and downloading files/folders via SFTP. These are one-shot operations — they open a connection, transfer, and close automatically. They do NOT require ssh_open.
+
+**ssh_upload** — Upload local files and/or folders to a remote server via SFTP. Accepts a mix of file paths and directory paths — directories are uploaded recursively. Remote directories are created as needed.
+- `profile` (string, required): SSH profile name from mcp-config.json
+- `paths` (array, required): Array of local file or folder paths to upload
+- `destination` (string, required): Remote destination folder path (e.g., "/home/user/project/")
+- `overwrite` (boolean): Overwrite existing remote files. Default: true
+
+**ssh_download** — Download remote files and/or folders from a server via SFTP. Accepts a mix of remote file and directory paths — directories are downloaded recursively. Local directories are created as needed.
+- `profile` (string, required): SSH profile name from mcp-config.json
+- `paths` (array, required): Array of remote file or folder paths to download
+- `destination` (string, required): Local destination folder path (e.g., "D:\\downloads\\")
+- `overwrite` (boolean): Overwrite existing local files. Default: true
+
+Usage examples:
+
+```
+// Upload files and folders to remote server
+ssh_upload:
+  profile: "myserver"
+  paths: ["D:\\project\\src\\", "D:\\project\\web.config"]
+  destination: "/var/www/mysite/"
+
+// Download from remote server
+ssh_download:
+  profile: "myserver"
+  paths: ["/var/log/myapp.log", "/var/www/mysite/uploads/"]
+  destination: "D:\\backups\\server\\"
+```
 
 ---
 

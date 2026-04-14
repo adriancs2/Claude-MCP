@@ -1,13 +1,13 @@
 # MCP2 — Enhanced MCP Tool Server for Claude Desktop
 
-A unified MCP (Model Context Protocol) server that gives Claude Desktop 60 tools for file operations, code editing, shell commands, database access, document processing, HTTP requests, and more. Built as a single .NET Framework 4.8 console application.
+A unified MCP (Model Context Protocol) server that gives Claude Desktop 90+ tools for file operations, code editing, shell commands, database access, SSH remote access, project building, HTTP requests, and more. Built as a single .NET Framework 4.8 console application.
 
 ![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.8-purple)
 ![C#](https://img.shields.io/badge/C%23-7.3-blue)
 ![License](https://img.shields.io/badge/license-Unlicense-green)
-![Tools](https://img.shields.io/badge/tools-60-orange)
+![Tools](https://img.shields.io/badge/tools-90+-orange)
 
-> **Note:** This is designed for **Claude Desktop** on Windows. Claude Code already has built-in tools that cover most of this functionality — though if you use Claude Code and need MySQL tools, you can extract that section from this project.
+> **Note:** This is designed for **Claude Desktop** on Windows. Claude Code already has built-in tools that cover most of this functionality — though if you use Claude Code and need MySQL, SSH, or MSBuild tools, you can extract those sections from this project.
 
 ---
 
@@ -29,6 +29,9 @@ Claude Desktop's built-in file tools are limited. You can't:
 - Replace a block of code with content-matching safety (like `str_replace`, but better)
 - Execute MySQL queries
 - Run shell commands and get the output back
+- SSH into remote servers and execute commands interactively
+- Transfer files to/from remote servers via SFTP
+- Build .NET Framework projects from the conversation
 
 ---
 
@@ -55,11 +58,26 @@ Edit `mcp-config.json` in the same folder as the `.exe`:
   "mysql_connection_string": "Server=localhost;Database=mydb;User=root;Password=secret;",
   "gc_memory_threshold_mb": 150,
   "debug_logging": false,
-  "backup_directory": null
+  "backup_directory": null,
+  "ssh_profiles": {
+    "myserver": {
+      "host": "192.168.1.100",
+      "port": 22,
+      "username": "admin",
+      "password": "your-password"
+    },
+    "myvps": {
+      "host": "vps.example.com",
+      "port": 22,
+      "username": "root",
+      "private_key_path": "C:\\Users\\you\\.ssh\\id_rsa",
+      "passphrase": ""
+    }
+  }
 }
 ```
 
-All fields are optional. If you don't use MySQL, leave the connection string empty.
+All fields are optional. If you don't use MySQL, leave the connection string empty. If you don't use SSH, omit the `ssh_profiles` section.
 
 | Setting | Description | Default |
 |---------|-------------|---------|
@@ -67,6 +85,7 @@ All fields are optional. If you don't use MySQL, leave the connection string emp
 | `gc_memory_threshold_mb` | Memory threshold to trigger garbage collection | 150 |
 | `debug_logging` | Write debug log to `mcp_debug.log` | false |
 | `backup_directory` | Custom path for backup files | `./backups` next to exe |
+| `ssh_profiles` | Named SSH connection profiles (see SSH Tools) | (none) |
 
 ### 4. Configure Claude Desktop
 
@@ -157,6 +176,26 @@ Full database access — queries, schema exploration, batch operations with vari
 
 `run_command` — Execute any program (PowerShell, CMD, or any executable) and get stdout/stderr back directly. Supports inline commands and script files.
 
+### Build (1 tool)
+
+`msbuild` — Build .NET Framework projects (.csproj, .sln, .slnx) using MSBuild. Auto-discovers MSBuild.exe from the latest installed Visual Studio — no configuration needed. Supports Build, Rebuild, Clean, and Restore targets.
+
+### SSH (5 tools)
+
+Remote server access via SSH and SFTP. Credentials are stored in `mcp-config.json` profiles — never passed as tool parameters.
+
+**Interactive Shell** — persistent, stateful remote sessions:
+
+`ssh_open` · `ssh_send` · `ssh_close`
+
+Open a connection with a named profile, send commands (state carries over between calls — `cd`, environment variables, etc.), and close when done.
+
+**File Transfer** — one-shot SFTP operations (no `ssh_open` needed):
+
+`ssh_upload` · `ssh_download`
+
+Upload or download files and folders. Accepts a mix of file paths and directory paths — directories are transferred recursively. The connection is opened, used, and closed automatically per call.
+
 ---
 
 ## Design Decisions
@@ -170,6 +209,14 @@ MCP2 provides both **line-based** and **content-based** editing because each has
 **Content-based** (`replace_first`, `replace_all`, `edit_nth_occurrence`) — Best for targeted single-spot edits: "find this exact block and replace it with this". Immune to stale line numbers. `replace_first` with `must_be_unique=true` (the default) is the safest — it refuses to edit if the match is ambiguous.
 
 Use content-based for precision. Use line-based for range work. Use `batch_edit` when you need multiple edits in one pass.
+
+### MSBuild Auto-Discovery
+
+The `msbuild` tool automatically finds MSBuild.exe by scanning `C:\Program Files\Microsoft Visual Studio\{version}\{edition}\MSBuild\Current\Bin\MSBuild.exe`. It picks the highest version number and checks Community, Professional, and Enterprise editions in that order. The discovered path is cached for the process lifetime — no configuration needed, and it works automatically when Visual Studio is upgraded.
+
+### SSH Profile-Based Authentication
+
+SSH credentials are stored in `mcp-config.json` under `ssh_profiles`, not passed as tool parameters. This keeps passwords and key paths out of the conversation. Each profile supports password authentication or private key authentication (with optional passphrase). The profile name doubles as the session identifier.
 
 ### Caller Validation
 
@@ -191,7 +238,7 @@ MCP2/
 │   ├── ITool.cs                  # Tool interface (Name, Description, Params, Execute)
 │   ├── ToolDiscovery.cs          # Auto-discovers all ITool implementations
 │   ├── ToolResult.cs             # Standardized success/error responses
-│   ├── McpConfig.cs              # Configuration loader
+│   ├── McpConfig.cs              # Configuration loader (incl. SSH profiles)
 │   ├── CallerValidator.cs        # Claude Desktop process validation
 │   ├── JsonRpcModels.cs          # JSON-RPC 2.0 request/response models
 │   └── McpModels.cs              # MCP protocol models
@@ -199,7 +246,10 @@ MCP2/
 │   ├── FileOperations.cs         # Core file read/write/edit logic
 │   ├── BackupService.cs          # Timestamped backup management
 │   ├── MySqlService.cs           # MySQL connection and query execution
-│   └── HttpService.cs            # HTTP request handling
+│   ├── HttpService.cs            # HTTP request handling
+│   ├── SshSessionManager.cs      # Persistent SSH connection management
+│   ├── SftpHelper.cs             # SFTP connection factory and utilities
+│   └── MsBuildDiscovery.cs       # Auto-discovers MSBuild.exe from Visual Studio
 └── Tools/                        # One class per tool, auto-discovered
     ├── File/                     # 13 tools: read, write, copy, move, etc.
     ├── FileEdit/                 # 12 tools: line-based and content-based editing
@@ -211,7 +261,9 @@ MCP2/
     ├── Http/                     # 3 tools: GET, POST, generic request
     ├── Zip/                      # 5 tools: create, extract, list archives
     ├── Image/                    # 1 tool: view_image (base64)
-    └── Shell/                    # 1 tool: run_command
+    ├── Shell/                    # 1 tool: run_command
+    ├── Build/                    # 1 tool: msbuild (auto-discovers Visual Studio)
+    └── Ssh/                      # 5 tools: ssh_open, ssh_send, ssh_close, ssh_upload, ssh_download
 ```
 
 Adding a new tool: implement `ITool` in a new `.cs` file under `Tools/`. It's auto-discovered at startup — no registration needed.
@@ -230,6 +282,7 @@ The `system-prompts.txt` file contains the complete tool reference documentation
 |---------|---------|
 | [Newtonsoft.Json](https://www.nuget.org/packages/Newtonsoft.Json/) | JSON-RPC protocol parsing |
 | [MySqlConnector](https://www.nuget.org/packages/MySqlConnector/) | MySQL database access |
+| [SSH.NET](https://www.nuget.org/packages/SSH.NET/) | SSH and SFTP remote access |
 
 ---
 

@@ -10,13 +10,15 @@ namespace MCP2.Tools.Shell
     public class RunCommand : ITool
     {
         public string Name => "run_command";
-        public string Description => "Execute an external program (cmd, powershell, or any executable) and return the output. stdout and stderr are captured directly in C# via stream redirection (not shell redirection), so output is always returned reliably. For single-line commands, pass program + parameters. For multi-line PowerShell scripts, write a .ps1 file first and pass it via script_path. ESCAPING NOTE: For PowerShell, the parameters string is wrapped in double quotes and passed via -Command. Only inner double quotes are escaped (doubled). If your command contains $variables, backticks, or complex quoting, write a .ps1 file and use script_path instead — this avoids all escaping issues.";
+        public string Description => "Execute an external program (cmd, powershell, or any executable) and return the output. stdout and stderr are captured directly in C# via stream redirection (not shell redirection), so output is always returned reliably. Three ways to run PowerShell: (1) 'parameters' for simple single-line commands, (2) 'script' for inline multi-line scripts (auto-creates and cleans up a temp .ps1 file), (3) 'script_path' for an existing .ps1 file on disk. The 'script' param is the PREFERRED approach — just paste your PowerShell code directly, no escaping needed, no temp file management. For non-PowerShell programs, use 'program' + 'parameters'.";
 
         public ToolParamList Params => new ToolParamList()
             .String("program", "Filename or full path to the executable (e.g., 'powershell', 'cmd', 'ipconfig', 'pnputil')", required: true)
-            .String("parameters", "Command-line arguments to pass to the program (for single-line execution). For PowerShell, do NOT include -Command or -File — just pass the command string directly. IMPORTANT: Only inner double quotes are escaped. If your command uses $variables, backticks, or complex quoting, use script_path instead.")
-            .String("script_path", "Full path to a script file (e.g., .ps1) for the program to execute. Use this for multi-line PowerShell scripts instead of inline parameters. -NoProfile -ExecutionPolicy Bypass is applied automatically. This is the PREFERRED approach for any PowerShell command containing $variables, backticks, single quotes, or complex expressions — it bypasses all escaping issues.")
+            .String("parameters", "Command-line arguments for single-line execution. For PowerShell, do NOT include -Command or -File — just the command string. For commands with $variables or complex quoting, use 'script' instead.")
+            .String("script", "Inline script content (multi-line supported). For PowerShell: auto-written to a temp .ps1 file, executed with -NoProfile -ExecutionPolicy Bypass, then deleted. For cmd: auto-written to a temp .bat file, then deleted. No escaping needed — just paste your script code directly. This is the PREFERRED approach for anything beyond a trivial one-liner.")
+            .String("script_path", "Full path to an existing script file (e.g., .ps1) on disk. Use 'script' instead if you want to pass the script content inline without pre-creating a file.")
             .String("report_log", "Full path to a text file where stdout will be written. The file content is automatically returned to you. Default: auto-generated temp file.")
+            .String("working_directory", "Working directory for the process. If not specified, inherits from the MCP2 server process.")
             .Bool("wait_for_exit", "Wait for the process to finish before returning. Default: true", defaultValue: true)
             .Int("timeout_seconds", "Maximum seconds to wait for the process. Default: 30", defaultValue: 30);
 
@@ -27,10 +29,22 @@ namespace MCP2.Tools.Shell
                 return ToolResult.Error("INVALID_PARAMS", "Missing 'program' parameter");
 
             string parameters = args.Value<string>("parameters") ?? "";
+            string script = args.Value<string>("script");
             string scriptPath = args.Value<string>("script_path");
             string reportLog = args.Value<string>("report_log");
+            string workingDirectory = args.Value<string>("working_directory");
             bool waitForExit = args.Value<bool?>("wait_for_exit") ?? true;
             int timeoutSeconds = args.Value<int?>("timeout_seconds") ?? 30;
+
+            // If inline script content is provided, write it to a temp file
+            string autoScriptPath = null;
+            if (!string.IsNullOrEmpty(script))
+            {
+                string ext = IsPowerShell(program) ? ".ps1" : IsCmd(program) ? ".bat" : ".sh";
+                autoScriptPath = Path.Combine(Path.GetTempPath(), $"mcp2_script_{Guid.NewGuid():N}{ext}");
+                System.IO.File.WriteAllText(autoScriptPath, script, new UTF8Encoding(false));
+                scriptPath = autoScriptPath;
+            }
 
             // Validate script_path if provided
             if (!string.IsNullOrEmpty(scriptPath))
@@ -48,6 +62,7 @@ namespace MCP2.Tools.Shell
 
             try
             {
+                // NOTE: autoScriptPath cleanup is in the finally block below
                 // Build final program and arguments
                 // FIX: Do NOT use shell-string redirection (> or *>).
                 // Instead, redirect stdout/stderr via ProcessStartInfo and write to log in C#.
@@ -102,6 +117,9 @@ namespace MCP2.Tools.Shell
                     StandardErrorEncoding = Encoding.UTF8,
                 };
 
+                if (!string.IsNullOrEmpty(workingDirectory) && System.IO.Directory.Exists(workingDirectory))
+                    psi.WorkingDirectory = workingDirectory;
+
                 var stdoutSb = new StringBuilder();
                 var stderrSb = new StringBuilder();
                 var resultSb = new StringBuilder();
@@ -139,8 +157,32 @@ namespace MCP2.Tools.Shell
                         if (!exited)
                         {
                             try { process.Kill(); } catch { }
-                            return ToolResult.Error("TIMEOUT",
-                                $"Process did not exit within {timeoutSeconds} seconds.");
+
+                            // FIX: Include any output captured before timeout
+                            // so the caller can debug what happened.
+                            var timeoutResult = new StringBuilder();
+                            timeoutResult.AppendLine($"Error [TIMEOUT]: Process did not exit within {timeoutSeconds} seconds.");
+
+                            string partialOut = stdoutSb.ToString().Trim();
+                            string partialErr = stderrSb.ToString().Trim();
+
+                            if (!string.IsNullOrEmpty(partialOut))
+                            {
+                                timeoutResult.AppendLine("--- Partial STDOUT ---");
+                                // Cap at 20KB to avoid huge payloads
+                                if (partialOut.Length > 20000)
+                                    partialOut = partialOut.Substring(0, 20000) + "\n... [TRUNCATED]";
+                                timeoutResult.AppendLine(partialOut);
+                            }
+                            if (!string.IsNullOrEmpty(partialErr))
+                            {
+                                timeoutResult.AppendLine("--- Partial STDERR ---");
+                                if (partialErr.Length > 20000)
+                                    partialErr = partialErr.Substring(0, 20000) + "\n... [TRUNCATED]";
+                                timeoutResult.AppendLine(partialErr);
+                            }
+
+                            return ToolResult.Error("TIMEOUT", timeoutResult.ToString());
                         }
 
                         exitCode = process.ExitCode;
@@ -202,6 +244,14 @@ namespace MCP2.Tools.Shell
             catch (Exception ex)
             {
                 return ToolResult.Error("EXECUTION_ERROR", $"Failed to execute: {ex.Message}");
+            }
+            finally
+            {
+                // Clean up auto-generated temp script file
+                if (autoScriptPath != null)
+                {
+                    try { System.IO.File.Delete(autoScriptPath); } catch { }
+                }
             }
         }
 

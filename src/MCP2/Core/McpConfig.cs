@@ -20,6 +20,7 @@ namespace MCP2.Core
         public static string BackupDirectory { get; private set; }
         public static string MsBuildPath { get; private set; }
         public static string NuGetPath { get; private set; }
+        public static Dictionary<string, SshProfile> SshProfiles { get; private set; }
 
         /// <summary>
         /// Load configuration from mcp-config.json
@@ -53,6 +54,22 @@ namespace MCP2.Core
             MsBuildPath = config["msbuild_path"]?.Value<string>();
             NuGetPath = config["nuget_path"]?.Value<string>();
 
+            // Load SSH profiles
+            SshProfiles = new Dictionary<string, SshProfile>(StringComparer.OrdinalIgnoreCase);
+            var sshNode = config["ssh_profiles"] as JObject;
+            if (sshNode != null)
+            {
+                foreach (var prop in sshNode.Properties())
+                {
+                    var profile = prop.Value.ToObject<SshProfile>();
+                    if (profile != null)
+                    {
+                        profile.Name = prop.Name;
+                        SshProfiles[prop.Name] = profile;
+                    }
+                }
+            }
+
             // Normalize optional paths if provided
             if (!string.IsNullOrEmpty(BackupDirectory))
             {
@@ -69,5 +86,33 @@ namespace MCP2.Core
                 NuGetPath = Path.GetFullPath(NuGetPath);
             }
         }
+    }
+
+    /// <summary>
+    /// SSH connection profile loaded from mcp-config.json
+    /// </summary>
+    public class SshProfile
+    {
+        /// <summary>Profile name (set from the JSON property key)</summary>
+        [JsonIgnore]
+        public string Name { get; set; }
+
+        [JsonProperty("host")]
+        public string Host { get; set; }
+
+        [JsonProperty("port")]
+        public int Port { get; set; } = 22;
+
+        [JsonProperty("username")]
+        public string Username { get; set; }
+
+        [JsonProperty("password")]
+        public string Password { get; set; }
+
+        [JsonProperty("private_key_path")]
+        public string PrivateKeyPath { get; set; }
+
+        [JsonProperty("passphrase")]
+        public string Passphrase { get; set; }
     }
 }
