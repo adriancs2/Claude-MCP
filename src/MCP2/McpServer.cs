@@ -294,6 +294,18 @@ namespace MCP2
                     IsError = toolResult.IsError ? (bool?)true : null
                 };
 
+                // Append warning if config file is using default values
+                if (McpConfig.UsingDefaults)
+                {
+                    mcpResult.Content.Add(new ToolContentItem
+                    {
+                        Type = "text",
+                        Text = string.Format(
+                            "\n\n⚠️ mcp-config.json is using default values. Please review and update: {0}",
+                            McpConfig.ConfigFilePath)
+                    });
+                }
+
                 SendResponse(request.Id, mcpResult);
 
                 // GC management (Section 1.6 of spec)

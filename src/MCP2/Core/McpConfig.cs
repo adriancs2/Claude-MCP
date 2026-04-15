@@ -23,18 +23,62 @@ namespace MCP2.Core
         public static Dictionary<string, SshProfile> SshProfiles { get; private set; }
 
         /// <summary>
+        /// True if the config file was auto-generated with default values and has not been customized yet.
+        /// </summary>
+        public static bool UsingDefaults { get; private set; }
+
+        /// <summary>
+        /// Full path to the config file
+        /// </summary>
+        public static string ConfigFilePath { get; private set; }
+
+        private const string DefaultConfigJson = @"{
+  ""mysql_connection_string"": ""Server=localhost;User=root;Password=1234;convertzerodatetime=true;treattinyasboolean=true;"",
+  ""gc_memory_threshold_mb"": 150,
+  ""debug_logging"": false,
+  ""backup_directory"": null,
+  ""ssh_profiles"": {
+    ""myserver"": {
+      ""host"": ""192.168.1.10"",
+      ""port"": 22,
+      ""username"": ""your-username"",
+      ""password"": ""your-password""
+    },
+    ""myvps"": {
+      ""host"": ""your-vps-hostname.com"",
+      ""port"": 22,
+      ""username"": ""root"",
+      ""private_key_path"": ""C:\\Users\\YourName\\.ssh\\id_rsa"",
+      ""passphrase"": """"
+    }
+  }
+}";
+
+        /// <summary>
+        /// Ensures the config file exists. If not, writes the default sample config.
+        /// </summary>
+        public static void EnsureConfigExists()
+        {
+            ConfigFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "mcp-config.json");
+
+            if (!File.Exists(ConfigFilePath))
+            {
+                File.WriteAllText(ConfigFilePath, DefaultConfigJson, System.Text.Encoding.UTF8);
+                UsingDefaults = true;
+            }
+        }
+
+        /// <summary>
         /// Load configuration from mcp-config.json
         /// </summary>
         public static void Load()
         {
-            string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "mcp-config.json");
-            
-            if (!File.Exists(configPath))
+            if (ConfigFilePath == null)
             {
-                throw new FileNotFoundException(string.Format("Configuration file not found: {0}", configPath));
+                EnsureConfigExists();
             }
 
-            string json = File.ReadAllText(configPath);
+            string json = File.ReadAllText(ConfigFilePath);
             JObject config = JObject.Parse(json);
 
             // Load allowed directories

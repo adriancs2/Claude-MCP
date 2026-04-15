@@ -14,6 +14,9 @@ namespace MCP2
                 Console.InputEncoding = Encoding.UTF8;
                 Console.OutputEncoding = Encoding.UTF8;
 
+                // Ensure config file exists (writes default sample if missing)
+                McpConfig.EnsureConfigExists();
+
                 // Load configuration
                 McpConfig.Load();
 
