@@ -7,11 +7,11 @@ A single-binary MCP server for Claude Desktop on Windows. 59 tools across file e
 ![License](https://img.shields.io/badge/license-Unlicense-green)
 ![Tools](https://img.shields.io/badge/tools-59-orange)
 
-```
-adriancs2 / Claude-MCP        Unlicense · C# · .NET 4.8
-```
+## Wiki Reference Guide
 
----
+* [Tool Reference](https://github.com/adriancs2/Claude-MCP/wiki/Tool-Reference)
+* [Setup and Configuration](https://github.com/adriancs2/Claude-MCP/wiki/Configuration)
+* [Architecture](https://github.com/adriancs2/Claude-MCP/wiki/Architecture)
 
 ## The shape of it
 
