@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using MCP2.Core;
 using MCP2.Services;
 using Newtonsoft.Json.Linq;
@@ -21,7 +22,17 @@ namespace MCP2.Tools.Build
                 new[] { "Debug", "Release" }, defaultValue: "Debug")
             .StringEnum("verbosity", "MSBuild output verbosity. Default: minimal",
                 new[] { "quiet", "minimal", "normal", "detailed", "diagnostic" }, defaultValue: "minimal")
-            .Int("timeout_seconds", "Maximum seconds to wait for the build. Default: 120", defaultValue: 120);
+            .Int("timeout_seconds", "Maximum seconds to wait for the build. Default: 120", defaultValue: 120)
+            .Bool("show_warnings", "If true, include warning lines in the output. If false (default), warnings are hidden and replaced with a count summary. Errors are always shown.", defaultValue: false);
+
+        // Matches MSBuild warning lines, e.g.:
+        //   C:\path\File.cs(12,34): warning CS0168: The variable 'x' is declared but never used [C:\path\Project.csproj]
+        //   C:\path\File.cs(12,34,12,40): warning CS0168: ...     (4-tuple span form, VS 2022+)
+        //   MSBUILD : warning MSB4011: ...
+        //   1>C:\path\File.cs(12,34): warning CS0168: ...          (multi-proc /m or VS IDE prefix)
+        // Case-insensitive; tolerates leading whitespace and optional "N>" project-node prefix.
+        private static readonly Regex WarningLineRegex =
+            new Regex(@"^\s*(?:\d+>)?.*?:\s*warning\s+[A-Z]+\d+\s*:", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public ToolResult Execute(JObject args)
         {
@@ -30,6 +41,7 @@ namespace MCP2.Tools.Build
             string configuration = args.Value<string>("configuration") ?? "Debug";
             string verbosity = args.Value<string>("verbosity") ?? "minimal";
             int timeoutSeconds = args.Value<int?>("timeout_seconds") ?? 120;
+            bool showWarnings = args.Value<bool?>("show_warnings") ?? false;
 
             if (string.IsNullOrEmpty(project))
                 return ToolResult.Error("INVALID_PARAMS", "Missing 'project' parameter");
@@ -105,6 +117,15 @@ namespace MCP2.Tools.Build
                     string stdout = stdoutSb.ToString().Trim();
                     string stderr = stderrSb.ToString().Trim();
 
+                    // Filter warnings by default (errors are always preserved).
+                    int warningCount = 0;
+                    if (!showWarnings)
+                    {
+                        stdout = FilterWarnings(stdout, out int outCount);
+                        stderr = FilterWarnings(stderr, out int errCount);
+                        warningCount = outCount + errCount;
+                    }
+
                     var resultSb = new StringBuilder();
 
                     if (exitCode == 0)
@@ -114,6 +135,11 @@ namespace MCP2.Tools.Build
                     else
                     {
                         resultSb.AppendLine($"Build FAILED. Exit code: {exitCode}");
+                    }
+
+                    if (!showWarnings && warningCount > 0)
+                    {
+                        resultSb.AppendLine($"{warningCount} warnings. (hidden — pass show_warnings=true to display)");
                     }
 
                     if (!string.IsNullOrEmpty(stdout))
@@ -145,6 +171,40 @@ namespace MCP2.Tools.Build
             {
                 return ToolResult.Error("EXECUTION_ERROR", $"Failed to execute MSBuild: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Removes MSBuild warning lines from the given text and returns the filtered result.
+        /// Errors and other output are preserved as-is.
+        /// </summary>
+        private static string FilterWarnings(string text, out int warningCount)
+        {
+            warningCount = 0;
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            var sb = new StringBuilder(text.Length);
+            // Split on \n; we'll re-emit lines that aren't warnings.
+            // Using Split keeps it simple and avoids platform line-ending quirks.
+            string[] lines = text.Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                // Strip trailing \r (from Windows CRLF) for matching only.
+                string trimmedForMatch = line.EndsWith("\r") ? line.Substring(0, line.Length - 1) : line;
+
+                if (WarningLineRegex.IsMatch(trimmedForMatch))
+                {
+                    warningCount++;
+                    continue;
+                }
+
+                sb.Append(line);
+                if (i < lines.Length - 1)
+                    sb.Append('\n');
+            }
+
+            return sb.ToString().Trim();
         }
     }
 }

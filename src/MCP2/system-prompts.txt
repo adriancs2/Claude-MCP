@@ -1,555 +1,454 @@
-# MCP2 — Enhanced Development Tools
+﻿# MCP2 — Enhanced Development Tools
 
-MCP2 is a unified MCP server providing 90+ tools for file system operations, code editing, database access, SSH remote access, project building, HTTP requests, compression, image viewing, and shell command execution. It runs as a single .NET Framework 4.8 console application communicating via JSON-RPC 2.0 over stdin/stdout.
+MCP2 is a unified MCP server providing **59 tools** across 13 categories: file operations, file editing, directory operations, search, backups & diff, batch reading, MySQL database, HTTP, ZIP, image viewing, shell execution, .NET build, and SSH/SFTP. It runs as a single .NET Framework 4.8 console application (`MCP2.exe`) communicating with Claude Desktop or Claude Code via JSON-RPC 2.0 over stdin/stdout.
 
-## Configuration
+## Core Principles
 
-All settings are in `mcp-config.json` next to the executable:
-
-- `mysql_connection_string` — MySQL database connection string.
-- `gc_memory_threshold_mb` — Working set threshold (MB) to trigger full GC. Default: 150.
-- `debug_logging` — Enable debug log file (`mcp_debug.log`). Default: false.
-- `backup_directory` — Custom backup folder. Default: `./backups` next to exe.
-- `ssh_profiles` — Named SSH connection profiles (see SSH Tools section).
+- **Diff on every edit** — Every file-modifying tool returns a unified diff (LCS-aligned, human-verifiable).
+- **Automatic backups** — Every write creates a timestamped `.bak` (e.g., `file.20260514_095422.bak`). Use `undo_last_edit` to roll back.
+- **Two editing paradigms** — Content-based (text-match, safer, default) and line-based (range work). Pick the right one for the job.
 
 ---
 
 ## Tool Reference
 
-### File Operations (13 tools)
+### File Operations (11 tools)
 
-**read_file** — Read the complete raw content of a file without line numbers.
+**read_file** — Read a file's contents. Returns raw text by default; pass `show_line_numbers=true` when you plan to follow up with line-targeted edits. Pass `start_line`/`end_line` for a range read (line numbers are always shown for ranged reads). Out-of-range values clamp gracefully.
 - `path` (string, required): Full path to the file
+- `show_line_numbers` (boolean): Default false for full reads, true for ranged reads
+- `start_line` (integer): First line, 1-based inclusive
+- `end_line` (integer): Last line, 1-based inclusive
 
-**read_file_lines** — Read file content with line numbers prefixed to each line. Supports optional line range.
-- `path` (string, required): Full path to the file
-- `start_line` (integer, optional): Starting line number (1-based). If omitted, reads from beginning.
-- `end_line` (integer, optional): Ending line number (1-based). If omitted, reads to end of file.
+**count_lines** — Total number of lines in a file. Returns -1 for binary files.
+- `path` (string, required)
 
-**read_line_range** — Read only a specific range of lines from a file.
-- `path` (string, required): Full path to the file
-- `start_line` (integer, required): Starting line number (1-based, inclusive)
-- `end_line` (integer, required): Ending line number (1-based, inclusive)
-- Out-of-range behavior: If `start_line` > file length, returns an info message with no data. If `end_line` > file length, silently clamps to the last line and returns available lines.
+**find_pattern** — Search a file for a text pattern; returns matching lines with line numbers. Use when you only need locations.
+- `path` (string, required)
+- `pattern` (string, required)
+- `case_sensitive` (boolean): Default true
+- `max_results` (integer): 0 = all. Default: 0
 
-**count_lines** — Get the total number of lines in a file. Returns -1 for binary files.
-- `path` (string, required): Full path to the file
+**find_all_occurrences** — Find all matches with surrounding context. Use this **before** `replace_string_nth` to identify which occurrence to target.
+- `path` (string, required)
+- `pattern` (string, required)
+- `context_lines` (integer): Default 2
+- `case_sensitive` (boolean): Default true
 
-**find_pattern** — Search for a pattern in a file and return all matching lines with their line numbers.
-- `path` (string, required): Full path to the file
-- `pattern` (string, required): Text pattern to search for
-- `case_sensitive` (boolean): Whether search is case-sensitive. Default: true
-- `max_results` (integer): Maximum number of matches to return (0 = all). Default: 0
+**write_file** — Create a new file or overwrite an existing one. UTF-8 with BOM by default (correct rendering of non-ASCII like Chinese in browsers/editors). Returns a unified diff when overwriting.
+- `path` (string, required)
+- `content` (string, required)
+- `encoding` (string): `utf8-bom` (default) or `utf8` (no BOM)
 
-**find_all_occurrences** — Find all instances of text with surrounding context lines. Use this to identify which occurrence to edit when there are multiple matches.
-- `path` (string, required): Full path to the file
-- `pattern` (string, required): Text pattern to search for
-- `context_lines` (integer): Number of lines before/after each match. Default: 2
-- `case_sensitive` (boolean): Whether search is case-sensitive. Default: true
+**append_to_file** — Append to end of file, creating it if missing. Returns a diff.
+- `path` (string, required)
+- `content` (string, required)
 
-**write_file** — Create a new file or overwrite an existing file with the specified content. Uses UTF-8 with BOM by default (ensures correct rendering of non-ASCII characters like Chinese text in browsers and editors). Returns file size and line count.
-- `path` (string, required): Full path of the file to write
-- `content` (string, required): Content to write to the file
-- `encoding` (string): File encoding — "utf8-bom" (default, recommended for web files with non-ASCII characters) or "utf8" (without BOM)
-
-**append_to_file** — Append content to the end of an existing file, or create a new file if it doesn't exist.
-- `path` (string, required): Full path of the file
-- `content` (string, required): Content to append
-
-**copy_file** — Copy a file to a new location.
-- `source_path` (string, required): Full path of the source file
-- `destination_path` (string, required): Full path of the destination file
-- `overwrite` (boolean): If true, overwrite existing destination file. Default: false
+**copy_file** — Copy a file.
+- `source_path` (string, required)
+- `destination_path` (string, required)
+- `overwrite` (boolean): Default false
 
 **move_file** — Move or rename a file.
-- `source_path` (string, required): Full path of the source file
-- `destination_path` (string, required): Full path of the destination file
+- `source_path` (string, required)
+- `destination_path` (string, required)
 
-**delete_file** — Delete a file. Use with caution!
-- `path` (string, required): Full path of the file to delete
+**delete_file** — Delete a file. Use with caution.
+- `path` (string, required)
 
-**file_exists** — Check if a file exists. Returns 'true' or 'false'.
-- `path` (string, required): Full path to the file
+**file_exists** — Returns `true` or `false`.
+- `path` (string, required)
 
-**get_file_info** — Get metadata about a file (size, dates, attributes).
-- `path` (string, required): Full path to the file
-
----
-
-### File Editing (12 tools)
-
-WARNING: Line numbers change after edits! For multiple edits to the same file, either use batch_edit (auto-sorts bottom-up), edit from bottom to top manually, or re-read the file between edits.
-
-**replace** — Replace a single line with new content.
-- `path` (string, required): Full path to the file
-- `line_number` (integer, required): Line number to replace (1-based)
-- `new_content` (string, required): New content for the line
-- `create_backup` (boolean): Create backup before editing. Default: true
-- Out-of-range behavior: If `line_number` > file length, makes no changes and returns an error message.
-
-**replace_line_range** — Replace a range of lines (start to end, inclusive) with new content. The new content can have more or fewer lines than the original range. This is the primary tool for replacing blocks of code.
-- `path` (string, required): Full path to the file
-- `start_line` (integer, required): Starting line number (1-based, inclusive)
-- `end_line` (integer, required): Ending line number (1-based, inclusive)
-- `new_content` (string, required): New content to replace the line range with
-- `create_backup` (boolean): Create backup before editing. Default: true
-- Out-of-range behavior: If `start_line` > file length, makes no changes and returns an error message. If `end_line` > file length, silently clamps to the last line and replaces from `start_line` to actual file end.
-
-**insert_at** — Insert new content before a specific line.
-- `path` (string, required): Full path to the file
-- `line_number` (integer, required): Line number where content will be inserted (1-based)
-- `content` (string, required): Content to insert
-- `create_backup` (boolean): Create backup before editing. Default: true
-
-**insert_after** — Insert new content after a specific line.
-- `path` (string, required): Full path to the file
-- `line_number` (integer, required): Line number after which content will be inserted (1-based)
-- `content` (string, required): Content to insert
-- `create_backup` (boolean): Create backup before editing. Default: true
-
-**delete** — Delete a range of lines from a file.
-- `path` (string, required): Full path to the file
-- `start_line` (integer, required): Starting line number (1-based)
-- `end_line` (integer, required): Ending line number (1-based, inclusive)
-- `create_backup` (boolean): Create backup before editing. Default: true
-- Out-of-range behavior: If `start_line` > file length, makes no changes and returns an error message. If `end_line` > file length, silently clamps to the last line and deletes from `start_line` to actual file end.
-
-**edit_nth_occurrence** — Replace the Nth occurrence of text in a file. Supports both single-line text and multi-line blocks (content can span multiple lines). Use find_all_occurrences first to identify which occurrence number you need.
-- `path` (string, required): Full path to the file
-- `find_text` (string, required): Text or multi-line block to find. Must match file content exactly (including whitespace and indentation).
-- `occurrence` (integer, required): Which occurrence to replace (1-based)
-- `replace_text` (string, required): Replacement text or multi-line block. Can be more or fewer lines than find_text.
-- `case_sensitive` (boolean): Whether search is case-sensitive. Default: true
-- `create_backup` (boolean): Create backup before editing. Default: true
-
-**batch_edit** — Perform multiple edits across one or more files in a single operation. Edits are automatically sorted bottom-up per file to preserve line numbers. Supports operations: replace, insert_at, insert_after, delete.
-- `edits` (array, required): Array of edit operations. Each object: {file, type, line or start_line, end_line (optional), content}. Use `line` for single-line targets (insert_at, insert_after). Use `start_line`/`end_line` for ranges (replace, delete). Both `line` and `start_line` are accepted interchangeably.
-- `create_backup` (boolean): Create backup for each file before editing. Default: true
-
-**replace_in_line_range** — Find and replace text within a specific range of lines (text pattern match within a line range, not a full line replacement).
-- `path` (string, required): Full path to the file
-- `start_line` (integer, required): Starting line number (1-based, inclusive)
-- `end_line` (integer, required): Ending line number (1-based, inclusive)
-- `find_text` (string, required): Text to find
-- `replace_text` (string, required): Text to replace with
-- `case_sensitive` (boolean): Whether search is case-sensitive. Default: false
-- `create_backup` (boolean): Create backup before editing. Default: true
-
-**replace_regex** — Find and replace using regular expressions. Supports $1, $2 capture groups.
-- `path` (string, required): Full path to the file
-- `regex_pattern` (string, required): Regular expression pattern
-- `replacement` (string, required): Replacement string (supports $1, $2 capture groups)
-- `create_backup` (boolean): Create backup before editing. Default: true
-
-**replace_all** — Replace all occurrences of text in a file. Supports both single-line text and multi-line blocks (content can span multiple lines). Reports the number of replacements made. Use replace_first with must_be_unique=true when you want to ensure exactly one match exists before replacing.
-- `path` (string, required): Full path to the file
-- `find_text` (string, required): Text or multi-line block to find. Must match file content exactly (including whitespace and indentation).
-- `replace_text` (string, required): Replacement text or multi-line block. Can be more or fewer lines than find_text.
-- `case_sensitive` (boolean): Whether search is case-sensitive. Default: true
-- `create_backup` (boolean): Create backup before editing. Default: true
-
-**replace_first** — Replace the first occurrence of text in a file. Supports both single-line text and multi-line blocks (content can span multiple lines). When must_be_unique is true (default), the find_text must appear exactly once in the file or the operation is rejected — this prevents accidental edits when the match is ambiguous. This is the safest content-based replace tool (equivalent to Anthropic's str_replace pattern).
-- `path` (string, required): Full path to the file
-- `find_text` (string, required): Text or multi-line block to find. Must match file content exactly (including whitespace and indentation). For multi-line blocks, include the full block as it appears in the file.
-- `replace_text` (string, required): Replacement text or multi-line block. Can be more or fewer lines than find_text.
-- `must_be_unique` (boolean): If true (default), find_text must appear exactly once in the file — rejects if 0 or 2+ matches found. Set to false to replace just the first occurrence even when duplicates exist. Default: true
-- `case_sensitive` (boolean): Whether search is case-sensitive. Default: true
-- `create_backup` (boolean): Create backup before editing. Default: true
+**get_file_info** — Size, dates, attributes, encoding heuristics.
+- `path` (string, required)
 
 ---
 
-### Directory Operations (7 tools)
+### File Editing (9 tools) — Two Parallel Approaches
 
-**list_directory** — List files and folders in a directory.
-- `path` (string, required): Full path to the directory
-- `pattern` (string): Filter pattern (e.g., "*.cs") or multiple patterns separated by semicolons (e.g., "*.cs;*.aspx")
-- `recursive` (boolean): Include subdirectories. Default: false
+**Content-based** edits locate the change by exact text match — immune to line-number drift, safer, and the recommended default. **Line-based** edits address by line number — best for range work right after a numbered read.
 
-**list_allowed_directories** — Show all directories that are configured as allowed in mcp-config.json.
-(no parameters)
+**Heuristic:** Content-based for precision. Line-based for ranges. `batch_edit_lines` for multiple edits in one pass.
 
-**create_directory** — Create a new directory. Parent directories will be created if they don't exist.
-- `path` (string, required): Full path of the directory to create
+#### Content-based (4 tools)
 
-**copy_directory** — Copy an entire directory including all files and subdirectories to a new location.
-- `source` (string, required): Full path of the source directory
-- `destination` (string, required): Full path of the destination directory
-- `overwrite` (boolean): If true, overwrite existing files in destination. Default: false
+All match exactly on text — whitespace, indentation, and line endings must match. Multi-line `old_string`/`new_string` supported.
 
-**move_directory** — Move or rename an entire directory including all contents.
-- `source` (string, required): Full path of the source directory
-- `destination` (string, required): Full path of the destination directory
+**replace_string** *(preferred)* — Replace exactly ONE occurrence. `must_be_unique=true` by default; if the match appears 0 or 2+ times the tool refuses with an `AMBIGUOUS_MATCH` error and recovery hints (add context, switch to `replace_string_nth`, or set `must_be_unique=false`).
+- `path` (string, required)
+- `old_string` (string, required)
+- `new_string` (string, required)
+- `must_be_unique` (boolean): Default true
+- `create_backup` (boolean): Default true
 
-**delete_directory** — Delete a directory. Use with caution!
-- `path` (string, required): Full path of the directory to delete
-- `recursive` (boolean): If true, delete all contents. If false, only delete if empty. Default: false
+**replace_string_all** — Replace EVERY occurrence in the file. Use for in-file renames (variable names, repeated literals). Reports the replacement count.
+- `path` (string, required)
+- `old_string` (string, required)
+- `new_string` (string, required)
+- `create_backup` (boolean): Default true
 
-**batch_copy_files** — Copy multiple files in a single operation. Supports copying to a single destination directory or mapping source->destination pairs.
-- `files` (array, required): Array of file paths (strings for simple mode) or objects with {source, destination}
-- `dest_dir` (string): Destination directory for all files (simple mode)
-- `overwrite` (boolean): If true, overwrite existing files. Default: false
-- `preserve_structure` (boolean): Preserve relative directory structure. Default: false
+**replace_string_nth** — Replace the Nth occurrence (1-based). Use only when the string legitimately appears multiple times and you need exactly one of them; pair with `find_all_occurrences` first. Brittle if the file changes elsewhere — prefer `replace_string` with extra context when possible.
+- `path` (string, required)
+- `old_string` (string, required)
+- `new_string` (string, required)
+- `n` (integer, required): 1-based occurrence index
+- `create_backup` (boolean): Default true
+
+**replace_string_regex** — .NET regex with substitution support (`$1`, `$2`, `${name}`; `$$` for literal `$`). Use for structural changes where literal matching would need too much context. Remember to escape regex metacharacters: `. * + ? ^ $ ( ) [ ] { } | \`.
+- `path` (string, required)
+- `pattern` (string, required): .NET regex
+- `replacement` (string, required)
+- `create_backup` (boolean): Default true
+
+#### Line-based (5 tools)
+
+Use immediately after a numbered read. Line numbers go stale after any edit that adds/removes lines.
+
+**replace_line** — Replace a single line.
+- `path` (string, required)
+- `line_number` (integer, required): 1-based
+- `new_content` (string, required)
+- `create_backup` (boolean): Default true
+
+**replace_lines** — Replace a range (inclusive). New content can have more or fewer lines than the original. Primary tool for code-block replacement.
+- `path` (string, required)
+- `start_line` (integer, required)
+- `end_line` (integer, required)
+- `new_content` (string, required)
+- `create_backup` (boolean): Default true
+
+**insert_after_line** — Insert content after the given line. Use `line=0` to insert at the very top.
+- `path` (string, required)
+- `line` (integer, required): 0 = top of file
+- `content` (string, required)
+- `create_backup` (boolean): Default true
+
+**delete_lines** — Delete a range or single line.
+- `path` (string, required)
+- `start_line` (integer, required)
+- `end_line` (integer): Defaults to `start_line`
+- `create_backup` (boolean): Default true
+
+**batch_edit_lines** *(workhorse for multi-edit sessions)* — Apply multiple edits to one file in a single call. All edits reference current line numbers; the tool sorts them bottom-up so numbers stay valid throughout. One backup, one consolidated unified diff.
+- `path` (string, required)
+- `edits` (array, required): Each edit is one of:
+  - `{ "type": "replace", "start_line": N, "end_line": M (optional), "new_content": "..." }`
+  - `{ "type": "insert_after", "line": N, "content": "..." }` (use `line=0` for top)
+  - `{ "type": "delete", "start_line": N, "end_line": M (optional) }`
+- `create_backup` (boolean): Default true
+
+---
+
+### Directory Operations (6 tools)
+
+**list_directory** — List entries with glob patterns, recursion, sorting, and exclusion.
+- `path` (string, required)
+- `patterns` (string): Semicolon-separated globs, e.g. `*.cs;*.aspx` or `src/**/test_*.py`. `**` auto-enables recursion.
+- `recursive` (boolean): Default false
+- `sort_by` (string): `name` (default) or `modified`
+- `sort_descending` (boolean): Default false
+- `exclude` (string): Semicolon-separated exclusion patterns, e.g. `node_modules;bin;obj;.git`
+- `max_results` (integer): 0 = all. Default: 0
+
+**create_directory** — Create a directory; parent directories are created as needed.
+- `path` (string, required)
+
+**copy_directory** — Recursive directory copy.
+- `source_path` (string, required)
+- `destination_path` (string, required)
+- `overwrite` (boolean): Default false
+
+**move_directory** — Move or rename a directory with all contents.
+- `source_path` (string, required)
+- `destination_path` (string, required)
+
+**delete_directory** — Delete a directory. Empty by default.
+- `path` (string, required)
+- `recursive` (boolean): Default false — set true to force-delete non-empty
+
+**batch_copy_files** — Copy many files in one call. Either drop them all into a single `dest_dir`, or pass explicit source→destination mappings.
+- `files` (array, required): Either array of source paths (with `dest_dir`) or array of `{source, destination}` objects
+- `dest_dir` (string): Required for simple-mode batches
+- `preserve_structure` (boolean): When true with `dest_dir`, recreates the relative directory tree from the common parent
+- `overwrite` (boolean): Default false
 
 ---
 
 ### Search Tools (2 tools)
 
-**find_in_files** — Search for a pattern across all files in a directory. Supports presets for common project types. Optionally show context lines around each match.
-- `path` (string, required): Directory path to search in
-- `pattern` (string, required): Text pattern to search for
-- `file_pattern` (string): File filter (e.g., "*.aspx", "*.cs;*.aspx")
-- `recursive` (boolean): Search subdirectories. Default: true
-- `case_sensitive` (boolean): Case-sensitive search. Default: true
-- `context_lines` (integer): Number of lines to show before/after each match (0 = match line only). Default: 0
-- `preset` (string enum): Preset exclusions — "dotnet", "web", "python"
-- `exclude_folders` (string): Semicolon-separated folder names to skip
-- `exclude_extensions` (string): Semicolon-separated extensions to skip
+**find_in_files** — Project-wide pattern search. Returns file paths, line numbers, and matches. Presets auto-exclude common build artifacts.
+- `path` (string, required): Root directory
+- `pattern` (string, required)
+- `file_pattern` (string): e.g. `*.cs`. Default `*`
+- `recursive` (boolean): Default true
+- `case_sensitive` (boolean): Default true
+- `context_lines` (integer): Lines around each match. Default 0
+- `preset` (string): `dotnet` (skips `bin`, `obj`, `packages`, `.vs`, `.git`), `web` (skips `node_modules`, `bower_components`, `dist`, `build`, `.git`), `python` (skips `__pycache__`, `.venv`, `venv`, `.git`)
+- `exclude_folders` (string): Semicolon-separated, for one-off cases
+- `exclude_extensions` (string): Semicolon-separated
 
-**replace_in_files** — Replace text across all matching files in a directory.
-- `path` (string, required): Directory path to search in
-- `find_text` (string, required): Text to find
-- `replace_text` (string, required): Text to replace with
-- `file_pattern` (string): File filter pattern
-- `recursive` (boolean): Search subdirectories. Default: true
-- `case_sensitive` (boolean): Case-sensitive search. Default: true
-- `preset` (string enum): Preset exclusions — "dotnet", "web", "python"
-- `exclude_folders` (string): Semicolon-separated folder names to skip
-- `exclude_extensions` (string): Semicolon-separated extensions to skip
-- `create_backup` (boolean): Create backup before editing. Default: true
+**replace_in_files** — Project-wide find-and-replace. Same filtering as `find_in_files`. Per-file backups by default. Returns a unified diff per modified file. Perfect for namespace updates, CSS class renames, project-wide refactors.
+- `path` (string, required)
+- `find` (string, required)
+- `replace` (string, required)
+- `file_pattern`, `recursive`, `case_sensitive`, `preset`, `exclude_folders`, `exclude_extensions` (same as above)
+- `create_backup` (boolean): Default true
 
 ---
 
-### Backup Tools (6 tools)
+### Backup & Diff (6 tools)
 
-**backup_file** — Create a timestamped backup of a file.
-- `path` (string, required): Full path to the file
+Every file-modifying tool creates a timestamped backup automatically (unless `create_backup=false`). Naming: `<filename>.<YYYYMMDD_HHMMSS>.bak` (with milliseconds for rapid successive edits). Backup directory configurable via `backup_directory` in config.
 
-**undo_last_edit** — Restore a file from its most recent backup.
-- `path` (string, required): Path to the file to restore
+**backup_file** — Manual checkpoint before risky refactors.
+- `path` (string, required)
 
-**list_backups** — List all available backups for a specific file, sorted newest first.
-- `path` (string, required): Path to the original file
+**undo_last_edit** — One-call restore from the most recent backup.
+- `path` (string, required)
 
-**compare_files** — Compare two files and show the differences.
-- `file1` (string, required): Path to the first file
-- `file2` (string, required): Path to the second file
+**list_backups** — All backups for a file, newest first, with sizes and timestamps.
+- `path` (string, required)
 
-**diff_preview** — Preview what changes WOULD be made without actually applying them.
-- `path` (string, required): Full path to the file
-- `operation` (string, required): The operation type (replace_all, replace_first, replace_regex)
-- `parameters` (object, required): The parameters for that operation
+**clear_backups** — Delete backups older than N days. Reclaim disk space.
+- `path` (string): Optional — omit to clear across all tracked files
+- `older_than_days` (integer, required)
 
-**clear_backups** — Delete old backup files, keeping only backups from the last N days.
-- `days_to_keep` (integer, required): Number of days to keep backups for
+**compare_files** — LCS-based unified diff between two files. Aligns unchanged lines correctly (one-line insertion at top of a 600-line file = one hunk, not 599 shifted lines).
+- `file1` (string, required)
+- `file2` (string, required)
+- `context_lines` (integer): Default 3
+- `ignore_whitespace` (boolean): Collapses runs, trims ends. Default false
+- `ignore_case` (boolean): Default false
 
----
-
-### Batch Read Tools (2 tools)
-
-**batch_read_files** — Read multiple complete files in a single operation.
-- `paths` (array, required): Array of file paths to read
-- `format` (string enum): Output format — "separated" (default), "combined", "minimal"
-- `include_line_numbers` (boolean): Prefix each line with its line number. Default: false
-
-**batch_read_files_ranges** — Read specific line ranges from multiple files in a single operation.
-- `files` (array, required): Array of objects: {path, ranges: [{start, end}], label (optional)}
-- `format` (string enum): Output format — "separated" (default), "combined", "minimal"
-- `include_line_numbers` (boolean): Prefix each line with its line number. Default: true
+**diff_preview** — DRY-RUN a `replace_first`, `replace_all`, or `replace_regex` and show the unified diff without applying. Use before committing project-wide refactors.
+- `path` (string, required)
+- `mode` (string, required): `replace_first`, `replace_all`, or `replace_regex`
+- `find` (string, required)
+- `replace` (string, required)
 
 ---
 
-### MySQL Tools (8 tools)
+### Batch Read (1 tool)
 
-Connection string is read from mcp-config.json.
-
-**mysql_execute** — Execute a MySQL statement that doesn't return a result set (INSERT, UPDATE, DELETE, CREATE, ALTER, DROP). Returns affected row count.
-- `query` (string, required): SQL statement to execute
-
-**mysql_select** — Execute a MySQL query that returns a result set (SELECT, SHOW, DESCRIBE, EXPLAIN).
-- `query` (string, required): SQL query to execute
-- `max_rows` (integer): Maximum rows to return. Default: 1000, max: 10000
-- `format` (string enum): Output format — "table" (default), "csv", "json"
-
-**mysql_scalar** — Execute a MySQL query that returns a single value (COUNT, MAX, etc.).
-- `query` (string, required): SQL query to execute
-
-**mysql_schema** — Get database schema information.
-- `info_type` (string enum, required): "databases", "tables", "columns", "create_table"
-- `database` (string): Database name (required for tables/columns/create_table)
-- `table` (string): Table name (required for columns/create_table)
-
-**mysql_test** — Test the MySQL connection.
-(no parameters)
-
-**batch_mysql_schema** — Get schema information for multiple tables in a single operation.
-- `database` (string, required): Database name
-- `tables` (array, required): Array of table names (or ["*"] for all)
-- `info_type` (string enum): "columns" (default), "create_table", "both"
-- `format` (string enum): Output format — "table" (default), "json"
-
-**batch_mysql_queries** — Execute multiple MySQL queries in a single operation. All queries run in a single transaction.
-- `queries` (array, required): Array of {query, type, label (optional)}
-- `format` (string enum): Output format — "separated" (default), "combined"
-
-**batch_mysql_queries_with_variables** — Execute multiple MySQL queries with variable passing between queries. Store results from one query and use them in subsequent queries.
-- `queries` (array, required): Array of {query, type, store_as (optional), label (optional)}
-- `format` (string enum): Output format — "separated" (default), "combined"
+**batch_read_files** — Read multiple files in one call. Use when you need context across several files (test, implementation, utility) before deciding what to edit.
+- `files` (array, required): Each entry is either a path string (full file) or `{ "path": "...", "start_line": N (optional), "end_line": M (optional), "label": "..." (optional) }`
+- `format` (string): `separated` (default, prominent headers), `combined` (lightweight), `minimal` (no headers)
+- `show_line_numbers` (boolean): Default false for full reads; ranged reads always show numbers
 
 ---
 
-### HTTP Tools (3 tools)
+### MySQL Database (8 tools)
 
-**http_get** — Send an HTTP GET request.
-- `url` (string, required): The URL to request
-- `headers` (string): Custom headers as JSON object
-- `return_type` (string): Response handling — "auto" (default), "text", "file"
-- `output_path` (string): File path to save response (required if return_type is "file")
+Connection string lives in `mcp-config.json` (`mysql_connection_string`). Tools split by result shape so responses stay compact.
 
-**http_post** — Send an HTTP POST request with form data or JSON body.
-- `url` (string, required): The URL to request
-- `payload` (string): Request body — JSON string for json type, or key-value pairs for form type
-- `body_type` (string): Body format — "json" (default) or "form"
-- `headers` (string): Custom headers as JSON object
-- `return_type` (string): Response handling — "auto" (default), "text", "file"
-- `output_path` (string): File path to save response
+**mysql_select** — `SELECT`, `SHOW`, `DESCRIBE`, `EXPLAIN`. Returns rows.
+- `query` (string, required)
+- `format` (string): `table` (default), `csv`, `json`
+- `max_rows` (integer): Default 1000, max 10000
 
-**http_request** — Send a generic HTTP request with any method (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS).
-- `url` (string, required): The URL to request
-- `method` (string): HTTP method. Default: GET
-- `payload` (string): Request body content
-- `body_type` (string): Body format — "json" (default) or "form"
-- `headers` (string): Custom headers as JSON object
-- `return_type` (string): Response handling — "auto" (default), "text", "file"
-- `output_path` (string): File path to save response
+**mysql_execute** — `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `DROP`, `ALTER`. Returns affected-row count.
+- `query` (string, required)
 
----
+**mysql_scalar** — Returns a single value. Use for `COUNT(*)`, `MAX(...)`, `EXISTS(...)`, etc.
+- `query` (string, required)
 
-### Zip Tools (5 tools)
+**mysql_schema** — Schema inspection.
+- `info_type` (string, required): `databases`, `tables`, `columns`, `create_table`
+- `database` (string): Required for `tables`, `columns`, `create_table`
+- `table` (string): Required for `columns`, `create_table`
 
-Uses built-in System.IO.Compression.
+**mysql_test** — Verify the configured connection works. Returns server version and current user.
 
-**zip_file** — Create a new ZIP file or add files to an existing ZIP archive.
-- `zip_path` (string, required): Full path to the ZIP file to create or update
-- `files` (array, required): Array of file paths to add
-- `overwrite` (boolean): Overwrite existing ZIP. Default: false
+**batch_mysql_schema** — Pull structure for multiple tables in one call.
+- `database` (string, required)
+- `tables` (array, required): `["*"]` for all, or specific names
+- `info_type` (string): `columns` (default), `create_table`, `both`
+- `format` (string): `table` (default), `json`
 
-**zip_folder** — Create a new ZIP file from an entire folder.
-- `zip_path` (string, required): Full path to the ZIP file to create or update
-- `folder_path` (string, required): Full path to the folder to zip
-- `recursive` (boolean): Include subdirectories. Default: true
-- `overwrite` (boolean): Overwrite existing ZIP. Default: false
+**batch_mysql_queries** — Run a sequence of queries in one call; each result is returned independently. All run in a single transaction.
+- `queries` (array, required): Array of SQL strings
 
-**extract_zip** — Extract all contents of a ZIP file to a destination folder.
-- `zip_path` (string, required): Full path to the ZIP file
-- `destination_path` (string, required): Full path to the destination folder
-- `overwrite` (boolean): Overwrite existing files. Default: true
-
-**extract_zip_content** — Extract specific files from a ZIP based on patterns (supports wildcards).
-- `zip_path` (string, required): Full path to the ZIP file
-- `destination_path` (string, required): Full path to the destination folder
-- `patterns` (array, required): Array of file patterns (e.g., ["*.dll", "lib/net48/**"])
-- `overwrite` (boolean): Overwrite existing files. Default: true
-
-**list_zip_contents** — List all files and folders inside a ZIP file with sizes.
-- `zip_path` (string, required): Full path to the ZIP file
-- `pattern` (string): Optional filter pattern (e.g., "*.dll")
+**batch_mysql_queries_with_variables** — Like `batch_mysql_queries` but the queries share session state. `SET @last_id := LAST_INSERT_ID()` in step 1 is visible in step 2 — useful for multi-step inserts where a foreign key depends on a freshly generated PK (no extra Claude round-trip).
+- `queries` (array, required)
 
 ---
 
-### Image Tools (1 tool)
+### HTTP (3 tools)
 
-**view_image** — Read an image file and return it as base64 data for visual analysis. Supported: PNG, JPG, JPEG, GIF, WEBP, BMP. Max 10MB.
-- `path` (string, required): Full path to the image file
+**http_get** — Simple GET with optional headers.
+- `url` (string, required)
+- `headers` (object): Custom headers
+- `return_type` (string): `auto` (default), `text`, `file`
+- `output_path` (string): Required when `return_type=file`
+
+**http_post** — POST with JSON or form body.
+- `url` (string, required)
+- `body` (string or object, required)
+- `body_type` (string): `json` or `form`
+- `headers` (object)
+- `return_type`, `output_path` (as above)
+
+**http_request** — Generic with any method (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS).
+- `url` (string, required)
+- `method` (string, required)
+- `headers` (object)
+- `body` (string or object)
+- `body_type` (string): `json` or `form`
+- `return_type`, `output_path` (as above)
+
+All three return status, headers, and body. Use for API exploration, local dev servers, JSON fetch & analyze.
 
 ---
 
-### Shell Tools (1 tool)
+### ZIP (5 tools)
 
-**run_command** — Execute an external program (cmd, powershell, or any executable) and return captured stdout + stderr. Output is captured via C# stream redirection, so it is always returned reliably regardless of shell.
+Built on `System.IO.Compression`.
 
-Three ways to run PowerShell (in order of preference):
+**zip_file** — Create a new ZIP or add files to an existing one.
+- `zip_path` (string, required)
+- `files` (array, required): File paths to add
+- `overwrite` (boolean): Default false (adds to existing); true recreates
 
-1. **`script`** (PREFERRED) — Paste inline script content directly, multi-line supported. Auto-written to a temp .ps1 file, executed with `-NoProfile -ExecutionPolicy Bypass`, temp file deleted after execution. No escaping needed. Use this for anything with `$variables`, backticks, pipelines, loops, or multi-line logic.
-2. **`script_path`** — Point to an existing .ps1 file on disk. Same execution flags applied automatically. Use when the script already exists as a file.
-3. **`parameters`** — For trivial single-line commands only (e.g., `Get-Date`, `ls`). Wrapped in `-Command "..."` with inner double quotes escaped. Avoid for anything containing `$variables` or complex quoting.
+**zip_folder** — Pack an entire folder.
+- `zip_path` (string, required)
+- `folder_path` (string, required)
+- `recursive` (boolean): Default true
+- `overwrite` (boolean): Default false
 
-For non-PowerShell programs, use `program` + `parameters` (e.g., `program: "ipconfig"`, `parameters: "/all"`).
+**extract_zip** — Extract everything to a destination folder.
+- `zip_path` (string, required)
+- `destination` (string, required)
+- `overwrite` (boolean): Default false
+
+**extract_zip_content** — Extract only matching patterns. Useful for grabbing specific files without unpacking the whole archive.
+- `zip_path` (string, required)
+- `destination` (string, required)
+- `patterns` (array, required): e.g. `["*.dll", "lib/net48/**"]`
+- `overwrite` (boolean): Default false
+
+**list_zip_contents** — List all entries with sizes; optional pattern filter. No extraction.
+- `zip_path` (string, required)
+- `pattern` (string): Optional filter
+
+---
+
+### Image (1 tool)
+
+**view_image** — Read an image file as base64 for visual analysis. Use when Claude needs to inspect a screenshot, diagram, or photo from disk.
+- `path` (string, required)
+- Supported: PNG, JPG, JPEG, GIF, WEBP, BMP
+- Max 10 MB
+
+---
+
+### Shell (1 tool)
+
+**run_command** — Execute any external program; returns stdout, stderr, and exit code.
+
+**Three ways to invoke PowerShell, in preference order:**
+
+1. **`script` (preferred)** — Paste an inline script directly. Multi-line supported. Auto-written to a temp `.ps1`, executed with `-NoProfile -ExecutionPolicy Bypass`, deleted afterward. **No escaping needed.** Use this any time you have `$variables`, backticks, pipelines, loops, or multi-line logic.
+2. **`script_path`** — Point at an existing `.ps1` file. Same execution flags applied.
+3. **`parameters`** — Single-line commands only (e.g., `Get-Date`). Wrapped in `-Command "..."`. Avoid for `$variables` or complex quoting.
+
+**For non-PowerShell programs:** `program` + `parameters` (e.g., `program: "ipconfig"`, `parameters: "/all"`).
 
 Parameters:
-- `program` (string, required): Filename or full path to the executable (e.g., "powershell", "cmd", "ipconfig", "mysqld.exe")
-- `parameters` (string): Command-line arguments for single-line execution. For PowerShell, do NOT include `-Command` or `-File` — just the command string.
-- `script` (string): Inline script content (multi-line supported). For PowerShell: auto-written to a temp .ps1 file, executed, then deleted. For cmd: auto-written to a temp .bat file, then deleted. No escaping needed — just paste your script code directly.
-- `script_path` (string): Full path to an existing script file (e.g., .ps1) on disk. Use `script` instead if you want to pass the script content inline.
-- `report_log` (string): Optional path to save a copy of the captured output. If omitted, output is still fully returned — no log file needed.
-- `working_directory` (string): Working directory for the process. If not specified, inherits from the MCP2 server process.
-- `wait_for_exit` (boolean): Wait for the process to finish before returning. Default: true. Set to false for fire-and-forget processes.
-- `timeout_seconds` (integer): Maximum seconds to wait before killing the process. Default: 30. Increase for long-running operations (e.g., builds, installs, database init).
+- `program` (string, required): Executable filename or full path
+- `parameters` (string): Single-line args
+- `script` (string): Inline PowerShell script content
+- `script_path` (string): Path to an existing script file
+- `working_directory` (string)
+- `report_log` (string): Optional path to mirror stdout to a file
+- `wait_for_exit` (boolean): Default true
+- `timeout_seconds` (integer): Default 30. Bump for long operations.
 
-Timeout behavior: If the process exceeds `timeout_seconds`, it is killed and the response includes any partial stdout/stderr captured before the timeout (capped at 20KB each). This ensures you always get diagnostic output even when a process hangs.
-
-Usage examples:
-
-```
-// Simple: run an executable directly
-program: "ipconfig"
-parameters: "/all"
-
-// PowerShell one-liner via parameters
-program: "powershell"
-parameters: "Get-Service MySQL_Main"
-
-// PowerShell multi-line via script (PREFERRED)
-program: "powershell"
-script: |
-  $svc = Get-Service MySQL_Main -ErrorAction SilentlyContinue
-  if ($svc.Status -eq 'Running') {
-      Write-Host "MySQL is running (PID: $($svc.ServiceHandle))"
-  } else {
-      Write-Host "MySQL is stopped"
-      Start-Service MySQL_Main
-      Write-Host "Started MySQL"
-  }
-timeout_seconds: 15
-
-// Run an existing .ps1 file
-program: "powershell"
-script_path: "D:\\scripts\\deploy.ps1"
-timeout_seconds: 120
-
-// CMD batch
-program: "cmd"
-parameters: "dir /s /b *.cs"
-working_directory: "D:\\projects\\myapp"
-
-// Direct executable
-program: "D:\\mysql\\server_main\\bin\\mysql.exe"
-parameters: "-u root -p1234 -e \"SELECT VERSION();\""
-```
+**Timeout behavior:** If the process exceeds the timeout, it's killed and partial stdout/stderr returned (capped at ~20 KB each). You always get diagnostic output.
 
 ---
 
-### Build Tools (1 tool)
+### Build (1 tool)
 
-**msbuild** — Build .NET Framework projects (.csproj, .sln, .slnx) using MSBuild. Auto-discovers MSBuild.exe from the latest installed Visual Studio — no configuration needed. Scans `C:\Program Files\Microsoft Visual Studio\{version}\{edition}\MSBuild\Current\Bin\MSBuild.exe`, picks the highest version, and caches the path for the process lifetime.
-- `project` (string, required): Full path to the .csproj, .sln, or .slnx file to build
-- `target` (string enum): MSBuild target — "Build" (default), "Rebuild", "Clean", "Restore"
-- `configuration` (string enum): Build configuration — "Debug" (default), "Release"
-- `verbosity` (string enum): Output verbosity — "quiet", "minimal" (default), "normal", "detailed", "diagnostic"
-- `timeout_seconds` (integer): Maximum seconds to wait for the build. Default: 120
+**msbuild** — Build .NET Framework projects and solutions (`.csproj`, `.sln`, `.slnx`).
 
-Usage examples:
+Auto-discovers `MSBuild.exe` from the latest installed Visual Studio (scans `C:\Program Files\Microsoft Visual Studio\{version}\{edition}\MSBuild\Current\Bin\MSBuild.exe`, picks the highest version, checks Community → Professional → Enterprise). Path cached for the process lifetime — upgrading VS keeps things working without config changes.
 
-```
-// Build a project (Debug)
-project: "D:\\projects\\MyApp\\MyApp.csproj"
+- `project_path` (string, required): `.csproj`, `.sln`, or `.slnx`
+- `target` (string): `Build` (default), `Rebuild`, `Clean`, `Restore`
+- `configuration` (string): `Debug` (default) or `Release`
+- `verbosity` (string): `quiet`, `minimal` (default), `normal`, `detailed`, `diagnostic`
+- `show_warnings` (boolean): Default false — errors always shown; warnings collapsed to a count summary unless expanded
+- `timeout_seconds` (integer): Default 120. Bump for large solutions.
 
-// Build a solution (Release)
-project: "D:\\projects\\MyApp\\MyApp.sln"
-configuration: "Release"
-
-// Rebuild (clean + build)
-project: "D:\\projects\\MyApp\\MyApp.csproj"
-target: "Rebuild"
-
-// NuGet restore
-project: "D:\\projects\\MyApp\\MyApp.csproj"
-target: "Restore"
-```
+Output post-processing handles VS 2022+ 4-tuple line/column spans, `N>` multi-proc prefixes, and `MSBUILD : warning MSBxxxx` lines.
 
 ---
 
-### SSH Tools (5 tools)
+### SSH / SFTP (5 tools)
 
-SSH tools use named profiles defined in `mcp-config.json` under `ssh_profiles`. Credentials are stored in the config file — never passed as tool parameters.
+Remote shell and file transfer. **All credentials live in `mcp-config.json` under `ssh_profiles`** — never passed as tool parameters and never visible in transcripts. Tools reference profiles by name only.
 
-**Profile configuration** in `mcp-config.json`:
-
+Profile shape:
 ```json
-{
-  "ssh_profiles": {
-    "myserver": {
-      "host": "192.168.1.100",
-      "port": 22,
-      "username": "admin",
-      "password": "your-password"
-    },
-    "myvps": {
-      "host": "vps.example.com",
-      "port": 22,
-      "username": "root",
-      "private_key_path": "C:\\Users\\you\\.ssh\\id_rsa",
-      "passphrase": ""
-    }
-  }
+"prod": {
+  "host": "example.com",
+  "port": 22,                                       // default
+  "username": "deploy",
+  "password": "...",                                // password auth
+  "private_key_path": "C:\\Users\\you\\.ssh\\id_rsa", // OR key auth
+  "passphrase": ""                                  // optional
 }
 ```
 
-#### Interactive Shell (3 tools)
+#### Interactive shell (3 tools — persistent connection)
 
-For interactive, stateful remote sessions. The shell is persistent — environment variables, working directory (`cd`), and other state carry over between `ssh_send` calls.
+State (cwd, env vars, shell history) carries across calls within a session.
 
-**ssh_open** — Open a persistent SSH connection using a named profile. The profile name becomes the session identifier for subsequent ssh_send and ssh_close calls.
-- `profile` (string, required): SSH profile name from mcp-config.json
+**ssh_open** — Open a persistent connection using a named profile. The profile name becomes the session identifier.
+- `profile` (string, required)
 
-**ssh_send** — Send a command to an open SSH session and return the output. The session must be opened first with ssh_open.
-- `command` (string, required): Shell command to execute on the remote server
-- `profile` (string): Which session (profile name) to send to. Default: "default"
-- `timeout_ms` (integer): Maximum milliseconds to wait for output. Default: 10000. Increase for slow commands. Max: 120000.
+**ssh_send** — Send a command to an open session.
+- `profile` (string, required)
+- `command` (string, required)
+- `timeout_ms` (integer): Default 10000. Increase for slow commands.
 
-**ssh_close** — Close an open SSH session and release resources.
-- `profile` (string): Which session to close. Default: "default". Use "all" to close every open session.
+**ssh_close** — End a session and release resources. Pass `profile: "all"` to close every open session.
+- `profile` (string, required)
 
-Usage examples:
+#### One-shot file transfer (2 tools — no `ssh_open` needed)
 
-```
-// Open connection
-ssh_open: profile: "myserver"
+**ssh_upload** — Upload local files or folders. Directories upload recursively. Remote directories created as needed.
+- `profile` (string, required)
+- `local_path` (string, required)
+- `remote_path` (string, required)
+- `overwrite` (boolean): Default true
 
-// Run commands (state persists between calls)
-ssh_send: profile: "myserver", command: "cd /var/www && ls -la"
-ssh_send: profile: "myserver", command: "pwd"  // still in /var/www
-
-// Close when done
-ssh_close: profile: "myserver"
-```
-
-#### File Transfer (2 tools)
-
-For uploading and downloading files/folders via SFTP. These are one-shot operations — they open a connection, transfer, and close automatically. They do NOT require ssh_open.
-
-**ssh_upload** — Upload local files and/or folders to a remote server via SFTP. Accepts a mix of file paths and directory paths — directories are uploaded recursively. Remote directories are created as needed.
-- `profile` (string, required): SSH profile name from mcp-config.json
-- `paths` (array, required): Array of local file or folder paths to upload
-- `destination` (string, required): Remote destination folder path (e.g., "/home/user/project/")
-- `overwrite` (boolean): Overwrite existing remote files. Default: true
-
-**ssh_download** — Download remote files and/or folders from a server via SFTP. Accepts a mix of remote file and directory paths — directories are downloaded recursively. Local directories are created as needed.
-- `profile` (string, required): SSH profile name from mcp-config.json
-- `paths` (array, required): Array of remote file or folder paths to download
-- `destination` (string, required): Local destination folder path (e.g., "D:\\downloads\\")
-- `overwrite` (boolean): Overwrite existing local files. Default: true
-
-Usage examples:
-
-```
-// Upload files and folders to remote server
-ssh_upload:
-  profile: "myserver"
-  paths: ["D:\\project\\src\\", "D:\\project\\web.config"]
-  destination: "/var/www/mysite/"
-
-// Download from remote server
-ssh_download:
-  profile: "myserver"
-  paths: ["/var/log/myapp.log", "/var/www/mysite/uploads/"]
-  destination: "D:\\backups\\server\\"
-```
+**ssh_download** — Download remote files or folders. Directories download recursively. Local directories created as needed.
+- `profile` (string, required)
+- `remote_path` (string, required)
+- `local_path` (string, required)
+- `overwrite` (boolean): Default true
 
 ---
 
-## Backups
+## Critical Usage Patterns
 
-- File editing tools create timestamped backups by default (`.bak` files)
-- Use `undo_last_edit` to quickly revert changes
-- Use `clear_backups` to manage backup storage
-- Backup location configurable via `backup_directory` in config
+**1. Edit safety — content-based first.** Default to `replace_string`. If you hit `AMBIGUOUS_MATCH`, add more context to `old_string` before reaching for `replace_string_nth`. Only use line-based edits for ranges/blocks, not single-token precision.
+
+**2. Multiple edits to one file — use `batch_edit_lines`.** Don't make sequential line-based edits; line numbers drift. Collect all edits, call `batch_edit_lines` once. The tool sorts bottom-up so numbers stay valid, and you get one consolidated diff.
+
+**3. Read with line numbers immediately before line-based edits.** Line numbers are accurate at read time and go stale after any insert/delete. For uncertain text matches, run `find_all_occurrences` first.
+
+**4. Verify diffs.** Every edit returns a unified diff — read it and confirm it matches your intent. The transcript is a complete edit audit log.
+
+**5. Rollback is one call.** `undo_last_edit` restores the most recent backup. `list_backups` shows what's available. `clear_backups` reclaims disk by age.
+
+**6. Project-wide refactors — preview first.** Use `diff_preview` (or `find_in_files` to scope) before `replace_in_files` on a large tree.
+
+**7. Batch when you can.** `batch_read_files` for cross-file context. `batch_copy_files` for multi-file copies. `batch_mysql_schema` / `batch_mysql_queries` / `batch_mysql_queries_with_variables` to avoid Claude round-trips when later steps depend on earlier ones.
+
+**8. SSH state persists across `ssh_send` calls.** `cd`, `export`, and shell history all carry. Use one-shot `ssh_upload`/`ssh_download` when you don't need a session.
+
+**9. PowerShell — prefer `script`.** Inline `script` parameter handles `$variables`, multi-line, and quoting cleanly with no escaping. `parameters` is single-line only.
+
+**10. MySQL — split by result shape.** `mysql_select` for rows, `mysql_execute` for writes, `mysql_scalar` for single values, `mysql_schema` for structure. Run `mysql_test` after editing the connection string.

@@ -12,7 +12,6 @@ namespace MCP2.Core
     /// </summary>
     public static class McpConfig
     {
-        public static List<string> AllowedDirectories { get; private set; }
         public static string MySqlConnectionString { get; private set; }
         public static int GcMemoryThresholdMb { get; private set; }
         public static bool DebugLogging { get; private set; }
@@ -81,13 +80,6 @@ namespace MCP2.Core
             string json = File.ReadAllText(ConfigFilePath);
             JObject config = JObject.Parse(json);
 
-            // Load allowed directories
-            AllowedDirectories = config["allowed_directories"]?.ToObject<List<string>>() ?? new List<string>();
-            
-            // Normalize paths (handle forward/back slashes, trailing slashes)
-            AllowedDirectories = AllowedDirectories
-                .Select(d => Path.GetFullPath(d.Replace('/', '\\')))
-                .ToList();
 
             // Load other settings
             MySqlConnectionString = config["mysql_connection_string"]?.Value<string>() ?? string.Empty;

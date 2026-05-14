@@ -279,7 +279,7 @@ namespace MCP2.Services
                 {
                     string value = dt.Rows[i][j]?.ToString() ?? "NULL";
                     if (value.Length > columnWidths[j])
-                        columnWidths[j] = Math.Min(value.Length, 50);
+                        columnWidths[j] = Math.Min(value.Length, 500);
                 }
             }
 
@@ -305,7 +305,7 @@ namespace MCP2.Services
                 for (int j = 0; j < dt.Columns.Count; j++)
                 {
                     string value = dt.Rows[i][j]?.ToString() ?? "NULL";
-                    if (value.Length > 50) value = value.Substring(0, 47) + "...";
+                    if (value.Length > 500) value = value.Substring(0, 497) + "...";
                     sb.Append(value.PadRight(columnWidths[j] + 2));
                     if (j < dt.Columns.Count - 1) sb.Append("| ");
                 }

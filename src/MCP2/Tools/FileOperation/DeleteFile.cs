@@ -2,7 +2,7 @@ using MCP2.Core;
 using MCP2.Services;
 using Newtonsoft.Json.Linq;
 
-namespace MCP2.Tools.File
+namespace MCP2.Tools.FileOperation
 {
     public class DeleteFile : ITool
     {
@@ -24,9 +24,14 @@ namespace MCP2.Tools.File
             if (!System.IO.File.Exists(path))
                 return ToolResult.Error($"File not found: {path}");
 
+            // Mandatory auto-backup before permanent deletion
+            var backupService = new BackupService();
+            string backupPath = backupService.CreateBackup(path);
+            string backupInfo = $"\nBackup created: {System.IO.Path.GetFileName(backupPath)}";
+
             System.IO.File.Delete(path);
             
-            return ToolResult.Success($"File deleted successfully: {path}");
+            return ToolResult.Success($"File deleted successfully: {path}{backupInfo}");
         }
     }
 }

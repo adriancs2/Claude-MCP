@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Text;
 
-namespace MCP2.Tools.File
+namespace MCP2.Tools.FileOperation
 {
     public class FindPattern : ITool
     {

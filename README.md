@@ -1,57 +1,228 @@
-# MCP2 — Enhanced MCP Tool Server for Claude Desktop
+﻿# MCP2
 
-A unified MCP (Model Context Protocol) server that gives Claude Desktop 90+ tools for file operations, code editing, shell commands, database access, SSH remote access, project building, HTTP requests, and more. Built as a single .NET Framework 4.8 console application.
+A single-binary MCP server for Claude Desktop on Windows. 59 tools across file editing, code search, MySQL, SSH/SFTP, MSBuild, HTTP, and shell. Written in C# on .NET Framework 4.8 — one `MCP2.exe`, no runtime to install, no Node, no Python, no Docker.
 
 ![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.8-purple)
 ![C#](https://img.shields.io/badge/C%23-7.3-blue)
 ![License](https://img.shields.io/badge/license-Unlicense-green)
-![Tools](https://img.shields.io/badge/tools-90+-orange)
-
-> **Note:** This is designed for **Claude Desktop** on Windows. Claude Code already has built-in tools that cover most of this functionality — though if you use Claude Code and need MySQL, SSH, or MSBuild tools, you can extract those sections from this project.
-
----
-
-## Documentation - How to Build MCP in C# Console App
-
-- [Documentation: Writing MCP Tools in C# (.NET Framework) for Claude Desktop/Code
-](https://adriancs.com/documentation-writing-mcp-tools-in-c-net-framework-for-claude-desktop-code/)
-- [Building a Self-Improving MCP Server Tool for Claude Desktop in C# (Console App)](https://adriancs.com/building-a-self-improving-mcp-server-tool-for-claude-desktop-in-c-console-app/)
-
----
-
-## Why This Exists
-
-Claude Desktop's built-in file tools are limited. You can't:
-
-- Edit a specific line by number
-- Target the 3rd occurrence of a pattern when there are 10 matches
-- Make multiple edits to a file without line numbers shifting
-- Replace a block of code with content-matching safety (like `str_replace`, but better)
-- Execute MySQL queries
-- Run shell commands and get the output back
-- SSH into remote servers and execute commands interactively
-- Transfer files to/from remote servers via SFTP
-- Build .NET Framework projects from the conversation
-
----
-
-## Quick Start
-
-### 1. Download
-
-Download `MCP2.zip` from the [releases page](https://github.com/adriancs2/Claude-MCP/releases).
-
-### 2. Extract
-
-Extract to a folder of your choice:
+![Tools](https://img.shields.io/badge/tools-59-orange)
 
 ```
-D:\Claude Files\MCP2
+adriancs2 / Claude-MCP        Unlicense · C# · .NET 4.8
 ```
 
-### 3. Configure
+---
 
-Edit `mcp-config.json` in the same folder as the `.exe`:
+## The shape of it
+
+```
+Claude Desktop  ──stdin/stdout JSON-RPC──►  MCP2.exe
+                                              │
+                                              ├─ Tools/        (59 ITool classes, auto-discovered)
+                                              ├─ Services/     (file ops, backup, diff, SSH, MySQL)
+                                              └─ Core/         (protocol, config, caller check)
+```
+
+Every tool is one `.cs` file implementing one interface:
+
+```csharp
+public interface ITool
+{
+    string Name { get; }
+    string Description { get; }
+    ToolParamList Params { get; }
+    ToolResult Execute(JObject args);
+}
+```
+
+At startup, `ToolDiscovery` reflects over the assembly, instantiates everything that implements `ITool`, and serves it. Drop a new `.cs` file into `Tools/`, rebuild, restart Claude Desktop — the tool shows up. No registration table, no manifest, no JSON schema written by hand. The schema is generated from the fluent `ToolParamList` definition on the tool itself.
+
+---
+
+## Two editing paradigms, both first-class
+
+File edits are the part Claude touches most, so this is where the design pays off.
+
+**Content-matched edits** locate the change point by *text*, not line number — so they don't break when earlier edits shift lines. `replace_string` is the safest tool in the set: by default it refuses to edit if `old_string` appears 0 or 2+ times, returning an `AMBIGUOUS_MATCH` error that explains exactly how to recover (add context, switch to `replace_string_nth`, or set `must_be_unique=false`).
+
+```
+  replace_string              must-be-unique, errors on 0 or 2+ matches
+  replace_string_all          every occurrence
+  replace_string_nth          the Nth occurrence, 1-based
+  replace_string_regex        .NET regex with $1, $2, ${name} substitutions
+```
+
+**Line-targeted edits** are better for range work — "delete lines 50–80", "replace this 30-line block with this 12-line block".
+
+```
+  replace_line                single line
+  replace_lines               range
+  insert_after_line           use line=0 for top-of-file
+  delete_lines                range
+  batch_edit_lines            many edits, one file, one call
+```
+
+`batch_edit_lines` is the interesting one. You pass several edits referencing the file's *current* line numbers. Internally it sorts them bottom-up before applying, so line numbers stay valid through the batch — no manual offset arithmetic. One backup per file regardless of edit count, and you get back a single consolidated unified diff.
+
+---
+
+## Every edit returns a unified diff
+
+This isn't decoration. The diff is computed by an LCS-based differ (`Services/UnifiedDiff.cs`, with `CompareFiles` using a full DP table for two-file compares). It aligns unchanged lines correctly — a one-line insertion at the top of a 600-line file produces one diff hunk, not 599 shifted lines. Pre-processing trims common prefix and suffix before LCS, lines are hashed to ints for fast equality, and there's a 25M-cell memory guard so a pathological 50K×50K compare doesn't OOM the host.
+
+So after every edit, Claude sees something like:
+
+```
+@@ -7,6 +7,7 @@
+     {
+         public string Name { get; set; }
+         public int Count { get; set; }
++        public DateTime CreatedAt { get; set; }
+ 
+         public string Render()
+         {
+```
+
+Claude can verify the change actually matches intent before moving on — and so can you, in the conversation transcript.
+
+---
+
+## Backups happen by default
+
+Every file-modifying tool calls `BackupService.CreateBackup` before writing. Backups land in `./backups` next to the exe (configurable) with timestamps like `markers.txt.20260514_095422.bak`. Rapid successive edits get millisecond resolution so nothing overwrites. `undo_last_edit` restores from the most recent backup. `list_backups` shows what's available. `clear_backups` reclaims disk space by age.
+
+`create_backup: false` is supported per-call when you really want to skip it.
+
+---
+
+## SSH that remembers state
+
+`ssh_open` opens a persistent connection using a named profile from `mcp-config.json`. `ssh_send` issues a command on that session — `cd`, environment variables, shell state, all of it carries across calls. `ssh_close` ends the session.
+
+Credentials never appear in tool parameters. You define them once in config:
+
+```json
+"ssh_profiles": {
+  "myvps": {
+    "host": "vps.example.com",
+    "port": 22,
+    "username": "root",
+    "private_key_path": "C:\\Users\\you\\.ssh\\id_rsa",
+    "passphrase": ""
+  }
+}
+```
+
+Then in conversation: `ssh_open("myvps")` and you're in. The profile name doubles as the session id, so Claude doesn't have to track tokens.
+
+For one-shot transfers, `ssh_upload` and `ssh_download` skip the open/close dance entirely — pass a mix of files and directories (directories transfer recursively), and the SFTP connection opens, transfers, and closes in a single call.
+
+---
+
+## MSBuild that auto-discovers Visual Studio
+
+```
+msbuild(project: "src/MyApp.sln", target: "Rebuild", configuration: "Release")
+```
+
+No config. The tool scans `C:\Program Files\Microsoft Visual Studio\{version}\{edition}\MSBuild\Current\Bin\MSBuild.exe`, picks the highest version number, checks Community → Professional → Enterprise in that order, and caches the path for the process. Upgrade Visual Studio and it just keeps working.
+
+Output is post-processed: errors are always shown, warnings are summarized to a count by default (`show_warnings: true` to expand). The warning-line regex handles 4-tuple spans (VS 2022+), `N>` multi-proc prefixes, and `MSBUILD : warning MSBxxxx` lines.
+
+Supports `Build`, `Rebuild`, `Clean`, `Restore` on `.csproj`, `.sln`, and `.slnx`.
+
+---
+
+## MySQL with batching and variable passing
+
+Eight MySQL tools, one connection string in `mcp-config.json`. The interesting ones:
+
+`batch_mysql_queries_with_variables` lets a sequence of queries share state — `@last_id := LAST_INSERT_ID()` in step 1 is available in step 2. Useful for multi-step inserts where the FK depends on the new PK without an extra round-trip.
+
+`mysql_schema` reports databases / tables / columns / `CREATE TABLE` in one tool, switched by `info_type`. `batch_mysql_schema` pulls structure for multiple tables in one call — handy when Claude is reading several related tables before writing a query.
+
+`mysql_select` returns result sets, `mysql_execute` returns affected rows, `mysql_scalar` returns a single value (for `COUNT(*)`, `MAX(...)`, etc.) — separate tools mean Claude picks the right shape and the response stays small.
+
+---
+
+## Process-identity check
+
+`CallerValidator` runs once at startup, walks up to two levels of parent processes via WMI, and checks the executable path against the Claude Desktop install patterns:
+
+```
+C:\Users\{user}\AppData\Local\AnthropicClaude\app-{n}.{n}.{n}\claude.exe
+C:\Program Files\WindowsApps\Claude_{version}_{arch}__{hash}\app\Claude.exe
+```
+
+Both legacy and MSIX install paths are recognized. If the parent isn't Claude Desktop (and the grandparent isn't either, since Claude can spawn via `cmd.exe`), startup throws and the process exits. There's a `MCP_BYPASS_VALIDATION` env var if you need to integrate from elsewhere, but the default behavior keeps the binary from being a generic exec-anything endpoint that another app on the machine could shell into.
+
+---
+
+## Auto-discovery and zero registration
+
+`ToolDiscovery.DiscoverTools()` is 30 lines. It reflects the assembly, finds every concrete `ITool`, calls the parameterless constructor, registers by `Name`. If one tool throws during construction it logs to stderr and keeps going — one broken tool doesn't kill the server.
+
+JSON schemas for the MCP protocol are generated from the same `ToolParamList` you use to declare params in C#:
+
+```csharp
+public ToolParamList Params => new ToolParamList()
+    .String("path", "Full path to the file", required: true)
+    .String("old_string", "Text to find...", required: true)
+    .String("new_string", "Replacement text...", required: true)
+    .Bool("must_be_unique", "...", defaultValue: true)
+    .Bool("case_sensitive", "Case-sensitive match", defaultValue: true);
+```
+
+`ToolDiscovery.GenerateToolDefinitions` walks the same list, emits the JSON schema with proper types, defaults, enums, and required fields. Description, schema, and runtime validation all share one source.
+
+---
+
+## The full tool list
+
+**File operations (11):** `read_file` · `count_lines` · `find_pattern` · `find_all_occurrences` · `write_file` · `append_to_file` · `copy_file` · `move_file` · `delete_file` · `file_exists` · `get_file_info`
+
+**File editing (9):** `replace_line` · `replace_lines` · `insert_after_line` · `delete_lines` · `batch_edit_lines` · `replace_string` · `replace_string_all` · `replace_string_nth` · `replace_string_regex`
+
+**Directory (6):** `list_directory` · `create_directory` · `copy_directory` · `move_directory` · `delete_directory` · `batch_copy_files`
+
+**Search (2):** `find_in_files` · `replace_in_files` (preset exclusions: `dotnet`, `web`, `python`)
+
+**Backup & diff (6):** `backup_file` · `undo_last_edit` · `list_backups` · `compare_files` · `diff_preview` · `clear_backups`
+
+**Batch read (1):** `batch_read_files` — full files or per-entry line ranges in one call
+
+**MySQL (8):** `mysql_execute` · `mysql_select` · `mysql_scalar` · `mysql_schema` · `mysql_test` · `batch_mysql_schema` · `batch_mysql_queries` · `batch_mysql_queries_with_variables`
+
+**HTTP (3):** `http_get` · `http_post` · `http_request`
+
+**Zip (5):** `zip_file` · `zip_folder` · `extract_zip` · `extract_zip_content` · `list_zip_contents`
+
+**Image (1):** `view_image` — base64 round-trip so Claude can see images on disk
+
+**Shell (1):** `run_command` — PowerShell, cmd, or any executable; stdout/stderr returned
+
+**Build (1):** `msbuild`
+
+**SSH (5):** `ssh_open` · `ssh_send` · `ssh_close` · `ssh_upload` · `ssh_download`
+
+---
+
+## Setup
+
+### 1. Get a build
+
+Grab `MCP2.zip` from [Releases](https://github.com/adriancs2/Claude-MCP/releases), or open `src/MCP2.slnx` in Visual Studio and build it yourself.
+
+### 2. Drop it somewhere
+
+```
+D:\Claude Files\MCP2\
+  ├─ MCP2.exe
+  ├─ mcp-config.json     (auto-generated on first run if missing)
+  └─ backups\            (created on first edit)
+```
+
+### 3. Configure (all fields optional)
 
 ```json
 {
@@ -65,31 +236,16 @@ Edit `mcp-config.json` in the same folder as the `.exe`:
       "port": 22,
       "username": "admin",
       "password": "your-password"
-    },
-    "myvps": {
-      "host": "vps.example.com",
-      "port": 22,
-      "username": "root",
-      "private_key_path": "C:\\Users\\you\\.ssh\\id_rsa",
-      "passphrase": ""
     }
   }
 }
 ```
 
-All fields are optional. If you don't use MySQL, leave the connection string empty. If you don't use SSH, omit the `ssh_profiles` section.
+Skip the MySQL string if you don't use MySQL. Skip `ssh_profiles` if you don't use SSH. The MySQL tools error politely when called without a connection string — they don't crash the server.
 
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `mysql_connection_string` | MySQL connection string | (empty) |
-| `gc_memory_threshold_mb` | Memory threshold to trigger garbage collection | 150 |
-| `debug_logging` | Write debug log to `mcp_debug.log` | false |
-| `backup_directory` | Custom path for backup files | `./backups` next to exe |
-| `ssh_profiles` | Named SSH connection profiles (see SSH Tools) | (none) |
+### 4. Point Claude Desktop at it
 
-### 4. Configure Claude Desktop
-
-Edit `C:\Users\{username}\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json`:
+Edit `claude_desktop_config.json` (`%APPDATA%\Claude\` or the MSIX equivalent):
 
 ```json
 {
@@ -102,177 +258,38 @@ Edit `C:\Users\{username}\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache
 }
 ```
 
-Replace the path with your actual installation path. Use double backslashes (`\\`).
-
-### 5. Restart Claude Desktop
-
-The tools will appear in Claude Desktop's tool list. Ask Claude to `list_directory` on any folder to verify.
+Restart Claude Desktop. Ask it to `list_directory` on any folder to confirm.
 
 ---
 
-## What's In the Box
+## Adding a tool
 
-### File Operations (13 tools)
+Create `Tools/Misc/EchoTool.cs`:
 
-Read, write, copy, move, delete files. Search for patterns with line numbers. Count lines. Check file existence and metadata.
+```csharp
+using MCP2.Core;
+using Newtonsoft.Json.Linq;
 
-`read_file` · `read_file_lines` · `read_line_range` · `count_lines` · `find_pattern` · `find_all_occurrences` · `write_file` · `append_to_file` · `copy_file` · `move_file` · `delete_file` · `file_exists` · `get_file_info`
+namespace MCP2.Tools.Misc
+{
+    public class EchoTool : ITool
+    {
+        public string Name => "echo";
+        public string Description => "Echo a string back. Useful for sanity-checking the connection.";
 
-### File Editing (12 tools)
+        public ToolParamList Params => new ToolParamList()
+            .String("text", "Text to echo", required: true);
 
-Two approaches — **line-based** and **content-based** — use whichever fits the situation.
-
-**Line-based editing** — when you know the line numbers:
-
-`replace` · `replace_line_range` · `insert_at` · `insert_after` · `delete` · `batch_edit` · `replace_in_line_range`
-
-**Content-based editing** — when you know the text to find:
-
-`replace_first` · `replace_all` · `edit_nth_occurrence` · `replace_regex`
-
-> **`replace_first` with `must_be_unique`** — This is the safest content-based edit tool. By default, it requires the find text to appear exactly once in the file, rejecting the edit if there are 0 or 2+ matches. This prevents accidental edits when the match is ambiguous — similar to Anthropic's `str_replace` pattern, but with the option to disable the uniqueness check when you explicitly want first-match behavior. Supports multi-line blocks.
-
-### Directory Operations (7 tools)
-
-`list_directory` · `list_allowed_directories` · `create_directory` · `copy_directory` · `move_directory` · `delete_directory` · `batch_copy_files`
-
-### Search Tools (2 tools)
-
-Search and replace across all files in a directory with filtering and presets.
-
-`find_in_files` · `replace_in_files`
-
-### Backup & Safety (6 tools)
-
-Every file edit creates a timestamped backup automatically. One-command undo.
-
-`backup_file` · `undo_last_edit` · `list_backups` · `compare_files` · `diff_preview` · `clear_backups`
-
-### Batch Read (2 tools)
-
-Read multiple files or specific line ranges from multiple files in one call.
-
-`batch_read_files` · `batch_read_files_ranges`
-
-### MySQL Database (8 tools)
-
-Full database access — queries, schema exploration, batch operations with variable passing.
-
-`mysql_execute` · `mysql_select` · `mysql_scalar` · `mysql_schema` · `mysql_test` · `batch_mysql_schema` · `batch_mysql_queries` · `batch_mysql_queries_with_variables`
-
-### HTTP (3 tools)
-
-`http_get` · `http_post` · `http_request`
-
-### Zip (5 tools)
-
-`zip_file` · `zip_folder` · `extract_zip` · `extract_zip_content` · `list_zip_contents`
-
-### Image (1 tool)
-
-`view_image` — Returns image as base64 for Claude to analyze visually.
-
-### Shell (1 tool)
-
-`run_command` — Execute any program (PowerShell, CMD, or any executable) and get stdout/stderr back directly. Supports inline commands and script files.
-
-### Build (1 tool)
-
-`msbuild` — Build .NET Framework projects (.csproj, .sln, .slnx) using MSBuild. Auto-discovers MSBuild.exe from the latest installed Visual Studio — no configuration needed. Supports Build, Rebuild, Clean, and Restore targets.
-
-### SSH (5 tools)
-
-Remote server access via SSH and SFTP. Credentials are stored in `mcp-config.json` profiles — never passed as tool parameters.
-
-**Interactive Shell** — persistent, stateful remote sessions:
-
-`ssh_open` · `ssh_send` · `ssh_close`
-
-Open a connection with a named profile, send commands (state carries over between calls — `cd`, environment variables, etc.), and close when done.
-
-**File Transfer** — one-shot SFTP operations (no `ssh_open` needed):
-
-`ssh_upload` · `ssh_download`
-
-Upload or download files and folders. Accepts a mix of file paths and directory paths — directories are transferred recursively. The connection is opened, used, and closed automatically per call.
-
----
-
-## Design Decisions
-
-### Two Editing Paradigms
-
-MCP2 provides both **line-based** and **content-based** editing because each has strengths:
-
-**Line-based** (`replace_line_range`, `batch_edit`, etc.) — Best for range operations: "delete lines 50–80", "replace lines 12–35 with this block". The `batch_edit` tool auto-sorts edits bottom-up to prevent line-shift corruption. The tradeoff: you need accurate line numbers, which go stale after edits.
-
-**Content-based** (`replace_first`, `replace_all`, `edit_nth_occurrence`) — Best for targeted single-spot edits: "find this exact block and replace it with this". Immune to stale line numbers. `replace_first` with `must_be_unique=true` (the default) is the safest — it refuses to edit if the match is ambiguous.
-
-Use content-based for precision. Use line-based for range work. Use `batch_edit` when you need multiple edits in one pass.
-
-### MSBuild Auto-Discovery
-
-The `msbuild` tool automatically finds MSBuild.exe by scanning `C:\Program Files\Microsoft Visual Studio\{version}\{edition}\MSBuild\Current\Bin\MSBuild.exe`. It picks the highest version number and checks Community, Professional, and Enterprise editions in that order. The discovered path is cached for the process lifetime — no configuration needed, and it works automatically when Visual Studio is upgraded.
-
-### SSH Profile-Based Authentication
-
-SSH credentials are stored in `mcp-config.json` under `ssh_profiles`, not passed as tool parameters. This keeps passwords and key paths out of the conversation. Each profile supports password authentication or private key authentication (with optional passphrase). The profile name doubles as the session identifier.
-
-### Caller Validation
-
-MCP2 validates that the calling process is Claude Desktop. Direct invocation from other processes is rejected. This is a built-in security boundary — not configurable.
-
-### Automatic Backups
-
-Every file edit creates a timestamped `.bak` file before making changes. This is on by default and can be disabled per-call with `create_backup: false`. Use `undo_last_edit` to restore instantly, or `clear_backups` to manage disk space.
-
----
-
-## Architecture
-
-```
-MCP2/
-├── Program.cs                    # Entry point, stdin/stdout JSON-RPC
-├── McpServer.cs                  # MCP protocol handler
-├── Core/
-│   ├── ITool.cs                  # Tool interface (Name, Description, Params, Execute)
-│   ├── ToolDiscovery.cs          # Auto-discovers all ITool implementations
-│   ├── ToolResult.cs             # Standardized success/error responses
-│   ├── McpConfig.cs              # Configuration loader (incl. SSH profiles)
-│   ├── CallerValidator.cs        # Claude Desktop process validation
-│   ├── JsonRpcModels.cs          # JSON-RPC 2.0 request/response models
-│   └── McpModels.cs              # MCP protocol models
-├── Services/
-│   ├── FileOperations.cs         # Core file read/write/edit logic
-│   ├── BackupService.cs          # Timestamped backup management
-│   ├── MySqlService.cs           # MySQL connection and query execution
-│   ├── HttpService.cs            # HTTP request handling
-│   ├── SshSessionManager.cs      # Persistent SSH connection management
-│   ├── SftpHelper.cs             # SFTP connection factory and utilities
-│   └── MsBuildDiscovery.cs       # Auto-discovers MSBuild.exe from Visual Studio
-└── Tools/                        # One class per tool, auto-discovered
-    ├── File/                     # 13 tools: read, write, copy, move, etc.
-    ├── FileEdit/                 # 12 tools: line-based and content-based editing
-    ├── Directory/                # 7 tools: list, create, copy, move, delete
-    ├── Search/                   # 2 tools: find_in_files, replace_in_files
-    ├── Backup/                   # 6 tools: backup, undo, compare, diff
-    ├── BatchRead/                # 2 tools: batch file reading
-    ├── MySql/                    # 8 tools: queries, schema, batch operations
-    ├── Http/                     # 3 tools: GET, POST, generic request
-    ├── Zip/                      # 5 tools: create, extract, list archives
-    ├── Image/                    # 1 tool: view_image (base64)
-    ├── Shell/                    # 1 tool: run_command
-    ├── Build/                    # 1 tool: msbuild (auto-discovers Visual Studio)
-    └── Ssh/                      # 5 tools: ssh_open, ssh_send, ssh_close, ssh_upload, ssh_download
+        public ToolResult Execute(JObject args)
+        {
+            string text = args.Value<string>("text") ?? "";
+            return ToolResult.Success(text);
+        }
+    }
+}
 ```
 
-Adding a new tool: implement `ITool` in a new `.cs` file under `Tools/`. It's auto-discovered at startup — no registration needed.
-
----
-
-## System Prompt
-
-The `system-prompts.txt` file contains the complete tool reference documentation. You can paste it into Claude Desktop's system prompt (or a Claude Project's instructions) to give Claude full awareness of all tools, their parameters, and usage patterns.
+Rebuild. Restart Claude Desktop. `echo` is now in the tool list. No registration, no manifest, no schema authoring — the `ToolParamList` fluent builder is the schema.
 
 ---
 
@@ -280,12 +297,21 @@ The `system-prompts.txt` file contains the complete tool reference documentation
 
 | Package | Purpose |
 |---------|---------|
-| [Newtonsoft.Json](https://www.nuget.org/packages/Newtonsoft.Json/) | JSON-RPC protocol parsing |
-| [MySqlConnector](https://www.nuget.org/packages/MySqlConnector/) | MySQL database access |
-| [SSH.NET](https://www.nuget.org/packages/SSH.NET/) | SSH and SFTP remote access |
+| [Newtonsoft.Json](https://www.nuget.org/packages/Newtonsoft.Json/) | JSON-RPC parsing |
+| [MySqlConnector](https://www.nuget.org/packages/MySqlConnector/) | MySQL access |
+| [SSH.NET](https://www.nuget.org/packages/SSH.NET/) | SSH + SFTP |
+
+That's it. Everything else — diff algorithm, backup management, MSBuild discovery, caller validation, JSON schema generation — is project code in `src/MCP2/`.
+
+---
+
+## Further reading
+
+- [Documentation: Writing MCP Tools in C# (.NET Framework) for Claude Desktop/Code](https://adriancs.com/documentation-writing-mcp-tools-in-c-net-framework-for-claude-desktop-code/)
+- [Building a Self-Improving MCP Server Tool for Claude Desktop in C# (Console App)](https://adriancs.com/building-a-self-improving-mcp-server-tool-for-claude-desktop-in-c-console-app/)
 
 ---
 
 ## License
 
-[The Unlicense](https://unlicense.org/) — public domain. Use however you want.
+[The Unlicense](https://unlicense.org/) — public domain. Take it, fork it, ship it, sell it. No attribution required.
