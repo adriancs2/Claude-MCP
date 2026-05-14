@@ -314,4 +314,4 @@ That's it. Everything else — diff algorithm, backup management, MSBuild discov
 
 ## License
 
-[The Unlicense](https://unlicense.org/) — public domain. Take it, fork it, ship it, sell it. No attribution required.
+[The Unlicense](https://unlicense.org/) — public domain
