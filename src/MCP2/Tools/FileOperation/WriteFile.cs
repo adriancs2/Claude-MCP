@@ -1,14 +1,13 @@
 ﻿using MCP2.Core;
 using MCP2.Services;
 using Newtonsoft.Json.Linq;
-using System.Text;
 
 namespace MCP2.Tools.FileOperation
 {
     public class WriteFile : ITool
     {
         public string Name => "write_file";
-        public string Description => "Write content to a file, creating it if it doesn't exist or overwriting if it does. Default encoding: UTF-8 with BOM (ensures correct non-ASCII rendering in browsers). When overwriting an existing file, returns a unified diff of the changes.";
+        public string Description => "Write content to a file, creating it if it doesn't exist or overwriting if it does. Default encoding: UTF-8 with BOM (ensures correct non-ASCII rendering in browsers).";
 
         public ToolParamList Params => new ToolParamList()
             .String("path", "Full path to the file", required: true)
@@ -30,18 +29,12 @@ namespace MCP2.Tools.FileOperation
             if (!string.IsNullOrEmpty(encoding) && encoding.Trim().ToLower() == "utf8")
                 useBom = false;
 
-            // Snapshot "before" only when overwriting — for new files there's
-            // nothing to diff against, and a giant "+ every line" diff would
-            // just be a noisy duplicate of the file content the caller already
-            // sent in.
+            // For new files there's nothing to back up; only back up when overwriting.
             bool isOverwrite = System.IO.File.Exists(path);
-            string before = null;
             string backupInfo = "";
 
             if (isOverwrite)
             {
-                before = System.IO.File.ReadAllText(path, Encoding.UTF8);
-
                 // Mandatory auto-backup since overwrite would destroy original content.
                 var backupService = new BackupService();
                 string backupPath = backupService.CreateBackup(path);
@@ -62,20 +55,11 @@ namespace MCP2.Tools.FileOperation
                 }
             }
 
-            StringBuilder result = new StringBuilder();
-            result.AppendLine(string.Format(
-                "File written: {0}\nSize: {1:N0} bytes, {2} line(s){3}",
-                System.IO.Path.GetFileName(path), fi.Length, lineCount, backupInfo));
+            string result = string.Format(
+                "File written successfully: {0}\n{1:N0} bytes written, {2} line(s){3}",
+                System.IO.Path.GetFileName(path), fi.Length, lineCount, backupInfo);
 
-            if (isOverwrite)
-            {
-                string after = System.IO.File.ReadAllText(path, Encoding.UTF8);
-                string diff = UnifiedDiff.ForEdit(path, before, after);
-                result.AppendLine();
-                result.Append(diff);
-            }
-
-            return ToolResult.Success(result.ToString());
+            return ToolResult.Success(result);
         }
     }
 }
