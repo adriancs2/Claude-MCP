@@ -14,7 +14,7 @@ namespace MCP2.Tools.Search
     public class ReplaceInFiles : ITool
     {
         public string Name => "replace_in_files";
-        public string Description => "Replace text across all matching files in a directory. Supports presets (dotnet, web, python) to auto-exclude bin/obj/packages/etc. Perfect for renaming CSS classes, updating namespaces, or project-wide refactoring.";
+        public string Description => "Replace text across all matching files in a directory. Supports presets (dotnet, web, python) to auto-exclude bin/obj/packages/etc. Returns a unified diff for each modified file. Perfect for renaming CSS classes, updating namespaces, or project-wide refactoring.";
 
         public ToolParamList Params => new ToolParamList()
             .String("path", "Directory path to search in", required: true)
@@ -48,7 +48,6 @@ namespace MCP2.Tools.Search
             if (replaceText == null)
                 return ToolResult.Error("INVALID_PARAMS", "Missing 'replace_text' parameter");
 
-            
             // Normalize line endings for consistent matching
             findText = FileOperations.NormalizeLineEndings(findText);
             replaceText = FileOperations.NormalizeLineEndings(replaceText);
@@ -109,6 +108,10 @@ namespace MCP2.Tools.Search
             int totalReplacements = 0;
             var results = new StringBuilder();
 
+            // Track each modified file so we can emit one diff per file at the end.
+            // Pre-edit content is captured at edit time and held in memory until the diff stage.
+            var diffEntries = new List<DiffEntry>();
+
             // Collect files
             string[] filePatterns = filePattern.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
             var allFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -149,7 +152,10 @@ namespace MCP2.Tools.Search
                 try
                 {
                     Encoding encoding = Encoding.UTF8;
-                    string content = FileOperations.NormalizeLineEndings(System.IO.File.ReadAllText(filePath, encoding));
+                    // Capture raw "before" content (for diffing) and normalized content (for matching)
+                    // separately. The diff layer normalizes internally too, so passing raw before is fine.
+                    string rawBefore = System.IO.File.ReadAllText(filePath, encoding);
+                    string content = FileOperations.NormalizeLineEndings(rawBefore);
 
                     // Count occurrences
                     int count = 0;
@@ -192,6 +198,13 @@ namespace MCP2.Tools.Search
                         filesModified++;
                         totalReplacements += count;
                         results.AppendLine(string.Format("  {0}: {1} replacement(s)", relativePath, count));
+
+                        diffEntries.Add(new DiffEntry
+                        {
+                            FilePath = filePath,
+                            Before = rawBefore,
+                            After = newContent
+                        });
                     }
                 }
                 catch { /* skip unreadable files */ }
@@ -201,7 +214,28 @@ namespace MCP2.Tools.Search
                 return ToolResult.Success(string.Format("No occurrences of \"{0}\" found in {1}", findText, path));
 
             results.Insert(0, string.Format("Replaced {0} occurrence(s) in {1} file(s):\n", totalReplacements, filesModified));
+
+            // Emit one consolidated unified diff per modified file.
+            results.AppendLine();
+            results.AppendLine(new string('=', 60));
+            results.AppendLine(string.Format("Diffs ({0} file(s)):", diffEntries.Count));
+            results.AppendLine(new string('=', 60));
+
+            foreach (var entry in diffEntries)
+            {
+                string diff = UnifiedDiff.ForEdit(entry.FilePath, entry.Before, entry.After);
+                results.AppendLine();
+                results.Append(diff);
+            }
+
             return ToolResult.Success(results.ToString());
+        }
+
+        private class DiffEntry
+        {
+            public string FilePath;
+            public string Before;
+            public string After;
         }
     }
 }

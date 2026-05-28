@@ -165,9 +165,6 @@ WARNING: Line numbers change after edits! For multiple edits to the same file, e
 - `pattern` (string): Filter pattern (e.g., "*.cs") or multiple patterns separated by semicolons (e.g., "*.cs;*.aspx")
 - `recursive` (boolean): Include subdirectories. Default: false
 
-**list_allowed_directories** — Show all directories that are configured as allowed in mcp-config.json.
-(no parameters)
-
 **create_directory** — Create a new directory. Parent directories will be created if they don't exist.
 - `path` (string, required): Full path of the directory to create
 

@@ -2,12 +2,12 @@ using MCP2.Core;
 using MCP2.Services;
 using Newtonsoft.Json.Linq;
 
-namespace MCP2.Tools.File
+namespace MCP2.Tools.FileOperation
 {
-    public class ReadFile : ITool
+    public class CountLines : ITool
     {
-        public string Name => "read_file";
-        public string Description => "Read the complete raw content of a file without line numbers.";
+        public string Name => "count_lines";
+        public string Description => "Count the total number of lines in a file. Returns -1 for binary files.";
         
         public ToolParamList Params => new ToolParamList()
             .String("path", "Full path to the file", required: true);
@@ -23,8 +23,12 @@ namespace MCP2.Tools.File
             if (!System.IO.File.Exists(path))
                 return ToolResult.Error($"File not found: {path}");
 
-            string content = FileOperations.ReadFile(path);
-            return ToolResult.Success(content);
+            int count = FileOperations.CountLines(path);
+            
+            if (count == -1)
+                return ToolResult.Success("Binary file - line count not applicable");
+            
+            return ToolResult.Success($"Total lines: {count}");
         }
     }
 }

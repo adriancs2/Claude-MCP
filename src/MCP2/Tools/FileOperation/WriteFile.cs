@@ -1,14 +1,14 @@
-using MCP2.Core;
+﻿using MCP2.Core;
 using MCP2.Services;
 using Newtonsoft.Json.Linq;
 
-namespace MCP2.Tools.File
+namespace MCP2.Tools.FileOperation
 {
     public class WriteFile : ITool
     {
         public string Name => "write_file";
         public string Description => "Write content to a file, creating it if it doesn't exist or overwriting if it does. Default encoding: UTF-8 with BOM (ensures correct non-ASCII rendering in browsers).";
-        
+
         public ToolParamList Params => new ToolParamList()
             .String("path", "Full path to the file", required: true)
             .String("content", "Content to write to the file", required: true)
@@ -25,14 +25,25 @@ namespace MCP2.Tools.File
             if (content == null)
                 return ToolResult.Error("INVALID_PARAMS", "Missing 'content' parameter");
 
-            
-
             bool useBom = true; // default: UTF-8 with BOM
             if (!string.IsNullOrEmpty(encoding) && encoding.Trim().ToLower() == "utf8")
                 useBom = false;
 
+            // For new files there's nothing to back up; only back up when overwriting.
+            bool isOverwrite = System.IO.File.Exists(path);
+            string backupInfo = "";
+
+            if (isOverwrite)
+            {
+                // Mandatory auto-backup since overwrite would destroy original content.
+                var backupService = new BackupService();
+                string backupPath = backupService.CreateBackup(path);
+                backupInfo = string.Format("\nBackup created: {0}",
+                    System.IO.Path.GetFileName(backupPath));
+            }
+
             FileOperations.WriteFile(path, content, useBom);
-            
+
             var fi = new System.IO.FileInfo(path);
             int lineCount = 0;
             if (content.Length > 0)
@@ -44,9 +55,11 @@ namespace MCP2.Tools.File
                 }
             }
 
-            return ToolResult.Success(string.Format(
-                "File written: {0}\nSize: {1:N0} bytes, {2} line(s)", 
-                System.IO.Path.GetFileName(path), fi.Length, lineCount));
+            string result = string.Format(
+                "File written successfully: {0}\n{1:N0} bytes written, {2} line(s){3}",
+                System.IO.Path.GetFileName(path), fi.Length, lineCount, backupInfo);
+
+            return ToolResult.Success(result);
         }
     }
 }

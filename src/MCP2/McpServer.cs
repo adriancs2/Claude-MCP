@@ -301,7 +301,7 @@ namespace MCP2
                     {
                         Type = "text",
                         Text = string.Format(
-                            "\n\n⚠️ mcp-config.json is using default values. Please review and update: {0}",
+                            "\n\n⚠️ mcp-config.json is using default values. Please review and update: {0}. This warning will only exist when the config file is created on the first run. When the mcp server restart for the 2nd time, this message will not be displayed again.",
                             McpConfig.ConfigFilePath)
                     });
                 }

@@ -2,12 +2,12 @@ using MCP2.Core;
 using MCP2.Services;
 using Newtonsoft.Json.Linq;
 
-namespace MCP2.Tools.File
+namespace MCP2.Tools.FileOperation
 {
-    public class CopyFile : ITool
+    public class MoveFile : ITool
     {
-        public string Name => "copy_file";
-        public string Description => "Copy a file to a new location.";
+        public string Name => "move_file";
+        public string Description => "Move a file to a new location.";
         
         public ToolParamList Params => new ToolParamList()
             .String("source_path", "Source file path", required: true)
@@ -39,9 +39,19 @@ namespace MCP2.Tools.File
             if (!string.IsNullOrEmpty(destDir) && !System.IO.Directory.Exists(destDir))
                 System.IO.Directory.CreateDirectory(destDir);
 
-            System.IO.File.Copy(sourcePath, destPath, overwrite);
+            // Mandatory auto-backup of destination if it will be overwritten
+            string backupInfo = "";
+            if (overwrite && System.IO.File.Exists(destPath))
+            {
+                var backupService = new BackupService();
+                string backupPath = backupService.CreateBackup(destPath);
+                backupInfo = $"\nBackup of overwritten destination: {System.IO.Path.GetFileName(backupPath)}";
+                System.IO.File.Delete(destPath);
+            }
+
+            System.IO.File.Move(sourcePath, destPath);
             
-            return ToolResult.Success($"File copied successfully:\nFrom: {sourcePath}\nTo: {destPath}");
+            return ToolResult.Success($"File moved successfully:\nFrom: {sourcePath}\nTo: {destPath}{backupInfo}");
         }
     }
 }

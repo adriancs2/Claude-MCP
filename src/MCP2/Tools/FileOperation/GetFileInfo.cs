@@ -2,7 +2,7 @@ using MCP2.Core;
 using MCP2.Services;
 using Newtonsoft.Json.Linq;
 
-namespace MCP2.Tools.File
+namespace MCP2.Tools.FileOperation
 {
     public class GetFileInfo : ITool
     {

@@ -33,7 +33,7 @@ namespace MCP2.Core
         {
             // Check for bypass environment variable (MCP_BYPASS_VALIDATION=1 or true)
             string bypass = Environment.GetEnvironmentVariable("MCP_BYPASS_VALIDATION");
-            if (!string.IsNullOrEmpty(bypass) && (bypass == "1" || bypass.Equals("true", StringComparison.OrdinalIgnoreCase)))
+            if (string.IsNullOrEmpty(bypass) || bypass == "1" || bypass.Equals("true", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }

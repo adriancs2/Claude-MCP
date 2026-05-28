@@ -9,15 +9,19 @@ using System.Text;
 namespace MCP2.Tools.Search
 {
     /// <summary>
-    /// Search for a pattern across all files in a directory
+    /// Search for a pattern across all files in a directory, or within a single file.
+    /// When <c>path</c> is a directory, files are enumerated using <c>file_pattern</c>,
+    /// <c>recursive</c>, and the folder/extension exclusion settings. When <c>path</c>
+    /// is a file, those enumeration settings are skipped and only that file is searched
+    /// (extension exclusions and the binary-file check still apply).
     /// </summary>
     public class FindInFiles : ITool
     {
         public string Name => "find_in_files";
-        public string Description => "Search for a pattern across all files in a directory. Supports presets (dotnet, web, python) to auto-exclude bin/obj/packages/etc. Use context_lines to see surrounding code.";
+        public string Description => "Search for a pattern across all files in a directory, or within a single file. Supports presets (dotnet, web, python) to auto-exclude bin/obj/packages/etc. Use context_lines to see surrounding code.";
 
         public ToolParamList Params => new ToolParamList()
-            .String("path", "Directory path to search in", required: true)
+            .String("path", "Directory path to search in, OR a single file path to search within just that file", required: true)
             .String("pattern", "Text pattern to search for", required: true)
             .String("file_pattern", "File filter pattern (e.g., \"*.aspx\", \"*.cs\", \"*.aspx;*.cs\")")
             .Bool("recursive", "Search subdirectories", defaultValue: true)
@@ -46,8 +50,19 @@ namespace MCP2.Tools.Search
 
             
 
-            if (!System.IO.Directory.Exists(path))
-                return ToolResult.Error(string.Format("Directory not found: {0}", path));
+            // Determine whether path is a file or a directory.
+            // When it's a file we search just that one file; when it's a directory
+            // we enumerate files inside it (the original behavior).
+            bool pathIsFile = System.IO.File.Exists(path);
+            bool pathIsDirectory = !pathIsFile && System.IO.Directory.Exists(path);
+
+            if (!pathIsFile && !pathIsDirectory)
+                return ToolResult.Error(string.Format("Path not found: {0}", path));
+
+            // The "search root" is used for computing relative paths in the output.
+            // For a single-file search, the root is the file's containing folder so
+            // the displayed name is just the filename.
+            string searchRoot = pathIsFile ? Path.GetDirectoryName(path) ?? path : path;
 
             // Apply presets
             HashSet<string> excludedFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -104,28 +119,42 @@ namespace MCP2.Tools.Search
             string[] filePatterns = filePattern.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
             var allFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (string fp in filePatterns)
+            if (pathIsFile)
             {
-                try
+                // Single-file mode: skip enumeration entirely. file_pattern, recursive,
+                // and folder-exclusion settings don't apply when the user named one file.
+                allFiles.Add(path);
+            }
+            else
+            {
+                foreach (string fp in filePatterns)
                 {
-                    foreach (string f in System.IO.Directory.GetFiles(path, fp.Trim(), searchOption))
-                        allFiles.Add(f);
+                    try
+                    {
+                        foreach (string f in System.IO.Directory.GetFiles(searchRoot, fp.Trim(), searchOption))
+                            allFiles.Add(f);
+                    }
+                    catch (UnauthorizedAccessException) { }
                 }
-                catch (UnauthorizedAccessException) { }
             }
 
             foreach (string filePath in allFiles)
             {
                 // Check folder exclusions
                 bool skip = false;
-                string relativePath = filePath.Substring(path.Length).TrimStart(Path.DirectorySeparatorChar);
-                string[] parts = relativePath.Split(Path.DirectorySeparatorChar);
-                for (int i = 0; i < parts.Length - 1; i++)
+                string relativePath = filePath.Substring(searchRoot.Length).TrimStart(Path.DirectorySeparatorChar);
+                // In single-file mode there's nothing under the root to exclude by folder,
+                // so we skip the folder-exclusion scan.
+                if (!pathIsFile)
                 {
-                    if (excludedFolders.Contains(parts[i]))
+                    string[] parts = relativePath.Split(Path.DirectorySeparatorChar);
+                    for (int i = 0; i < parts.Length - 1; i++)
                     {
-                        skip = true;
-                        break;
+                        if (excludedFolders.Contains(parts[i]))
+                        {
+                            skip = true;
+                            break;
+                        }
                     }
                 }
                 if (skip) continue;
