@@ -1,11 +1,11 @@
 ﻿# MCP2
 
-A single-binary MCP server for Claude Desktop on Windows. 59 tools across file editing, code search, MySQL, SSH/SFTP, MSBuild, HTTP, and shell. Written in C# on .NET Framework 4.8 — one `MCP2.exe`, no runtime to install, no Node, no Python, no Docker.
+A single-binary MCP server for Claude Desktop on Windows. 63 tools across file editing, code search, SQLite, MySQL, SSH/SFTP, MSBuild, HTTP, and shell. Written in C# on .NET Framework 4.8 — one `MCP2.exe`, no runtime to install, no Node, no Python, no Docker.
 
 ![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.8-purple)
 ![C#](https://img.shields.io/badge/C%23-7.3-blue)
 ![License](https://img.shields.io/badge/license-Unlicense-green)
-![Tools](https://img.shields.io/badge/tools-59-orange)
+![Tools](https://img.shields.io/badge/tools-63-orange)
 
 ```
 adriancs2 / Claude-MCP        Unlicense · C# · .NET 4.8
@@ -18,8 +18,8 @@ adriancs2 / Claude-MCP        Unlicense · C# · .NET 4.8
 ```
 Claude Desktop  ──stdin/stdout JSON-RPC──►  MCP2.exe
                                               │
-                                              ├─ Tools/        (59 ITool classes, auto-discovered)
-                                              ├─ Services/     (file ops, backup, diff, SSH, MySQL)
+                                              ├─ Tools/        (63 ITool classes, auto-discovered)
+                                              ├─ Services/     (file ops, backup, diff, SSH, MySQL, SQLite)
                                               └─ Core/         (protocol, config, caller check)
 ```
 
@@ -145,6 +145,18 @@ Eight MySQL tools, one connection string in `mcp-config.json`. The interesting o
 
 ---
 
+## SQLite, zero-config and full-trust
+
+Four SQLite tools, built specifically for Claude Code. Unlike MySQL there's no connection string to configure — every call takes a file path directly, with direct physical access to production database files.
+
+`sqlite_query` is one combined read+write tool. Pass a single `sql` string or an array of `statements` that run atomically in a single transaction — any failure rolls the whole batch back and names the offending statement. `SELECT`/`PRAGMA` return formatted rows (default 50, override with `max_rows`); `INSERT`/`UPDATE`/`DELETE`/DDL report affected rows. Output comes in four formats — `ascii`, `json` (typed values, not stringified), `csv`, `markdown`.
+
+`sqlite_schema` reports columns, indexes, and `CREATE` statements for one table, several, or `["*"]` for all. `sqlite_list_databases` recursively discovers `.db`/`.sqlite`/`.sqlite3`/`.db3` files under a directory. `sqlite_create_database` explicitly creates a new file — kept separate from `sqlite_query` so a typo'd path can't silently spawn a stray database.
+
+Backed by `Stub.System.Data.SQLite.Core` — the native engine ships in the binary, no external SQLite install needed.
+
+---
+
 ## Process-identity check
 
 `CallerValidator` runs once at startup, walks up to two levels of parent processes via WMI, and checks the executable path against the Claude Desktop install patterns:
@@ -192,6 +204,8 @@ public ToolParamList Params => new ToolParamList()
 **Batch read (1):** `batch_read_files` — full files or per-entry line ranges in one call
 
 **MySQL (8):** `mysql_execute` · `mysql_select` · `mysql_scalar` · `mysql_schema` · `mysql_test` · `batch_mysql_schema` · `batch_mysql_queries` · `batch_mysql_queries_with_variables`
+
+**SQLite (4):** `sqlite_query` · `sqlite_schema` · `sqlite_list_databases` · `sqlite_create_database`
 
 **HTTP (3):** `http_get` · `http_post` · `http_request`
 
@@ -299,6 +313,7 @@ Rebuild. Restart Claude Desktop. `echo` is now in the tool list. No registration
 |---------|---------|
 | [Newtonsoft.Json](https://www.nuget.org/packages/Newtonsoft.Json/) | JSON-RPC parsing |
 | [MySqlConnector](https://www.nuget.org/packages/MySqlConnector/) | MySQL access |
+| [Stub.System.Data.SQLite.Core](https://www.nuget.org/packages/Stub.System.Data.SQLite.Core.NetFramework/) | SQLite access (native engine bundled) |
 | [SSH.NET](https://www.nuget.org/packages/SSH.NET/) | SSH + SFTP |
 
 That's it. Everything else — diff algorithm, backup management, MSBuild discovery, caller validation, JSON schema generation — is project code in `src/MCP2/`.

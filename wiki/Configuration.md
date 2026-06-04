@@ -37,6 +37,8 @@ This file is auto-generated next to `MCP2.exe` on first run if it doesn't exist.
 
 **All fields are optional.** If you don't use MySQL, leave the connection string empty — the MySQL tools will error politely when called without crashing the server. If you don't use SSH, omit `ssh_profiles` entirely.
 
+> **SQLite needs no configuration.** The four `sqlite_*` tools take a database file path as a call parameter, so there's nothing to set up here — they work out of the box, and the native SQLite engine is bundled in the binary.
+
 | Setting | Description | Default |
 |---|---|---|
 | `mysql_connection_string` | MySQL connection string | (empty) |
@@ -280,6 +282,9 @@ Run `mysql_test` first. If it can't connect, the connection string in `mcp-confi
 
 **SSH `profile not found`.**
 The profile name in `mcp-config.json` is case-insensitive but spelling-sensitive. The tool's error message lists all available profiles to help you spot the typo.
+
+**SQLite tools fail with a `SQLite.Interop.dll` / `Unable to load DLL` error.**
+The SQLite engine ships as a native DLL that must sit next to `MCP2.exe`. A normal build places it in `x86\` and `x64\` subfolders of the output directory — keep those folders alongside the exe when you copy or deploy the build. If they're missing, rebuild, or copy the `x86`/`x64` folders from `bin\Release` (or `bin\Debug`).
 
 **Backups filling up disk.**
 By default backups go to `./backups` next to the exe. Use `clear_backups` with a day-count to prune old ones, or set `backup_directory` in `mcp-config.json` to a path on a different drive.

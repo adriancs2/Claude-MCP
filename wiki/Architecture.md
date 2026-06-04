@@ -22,6 +22,7 @@ MCP2/
 │   ├── FileOperations.cs         # Core file read/write/edit logic
 │   ├── BackupService.cs          # Timestamped backup management
 │   ├── MySqlService.cs           # MySQL connection and query execution
+│   ├── SqliteService.cs          # SQLite execution, schema, discovery, formatting
 │   ├── HttpService.cs            # HTTP request handling
 │   ├── SshSessionManager.cs      # Persistent SSH connection management
 │   ├── SftpHelper.cs             # SFTP connection factory and utilities
@@ -34,6 +35,7 @@ MCP2/
     ├── Search/                   # find_in_files, replace_in_files
     ├── Backup/                   # backup, undo, compare, diff
     ├── MySql/                    # queries, schema, batch operations
+    ├── Sqlite/                   # query (read+write), schema, list, create
     ├── Http/                     # GET, POST, generic request
     ├── Zip/                      # create, extract, list archives
     ├── Image/                    # view_image (base64)
@@ -59,10 +61,10 @@ Claude Desktop / Code
    McpServer.cs            ← protocol loop: parse request, dispatch, serialize response
         │
         ▼
-   Tool.Execute(args)      ← one of the 59 ITool implementations
+   Tool.Execute(args)      ← one of the 63 ITool implementations
         │
         ▼
-   Services/...            ← shared logic (file ops, backup, diff, SSH, MySQL, ...)
+   Services/...            ← shared logic (file ops, backup, diff, SSH, MySQL, SQLite, ...)
 ```
 
 **Startup** happens once:
@@ -267,9 +269,10 @@ Notes from experience:
 |---|---|
 | [Newtonsoft.Json](https://www.nuget.org/packages/Newtonsoft.Json/) | JSON-RPC parsing |
 | [MySqlConnector](https://www.nuget.org/packages/MySqlConnector/) | MySQL access |
+| [Stub.System.Data.SQLite.Core](https://www.nuget.org/packages/Stub.System.Data.SQLite.Core.NetFramework/) | SQLite access (native engine bundled) |
 | [SSH.NET](https://www.nuget.org/packages/SSH.NET/) | SSH + SFTP |
 
-That's all the runtime dependencies. Everything else — the diff algorithm, backup management, MSBuild discovery, caller validation, JSON-schema generation, the protocol loop — is project code in `src/MCP2/`. The target framework is .NET Framework 4.8 (C# 7.3), single-binary deploy via `bin/Release/MCP2.exe` plus its three referenced DLLs.
+That's all the runtime dependencies. Everything else — the diff algorithm, backup management, MSBuild discovery, caller validation, JSON-schema generation, the protocol loop — is project code in `src/MCP2/`. The target framework is .NET Framework 4.8 (C# 7.3), single-binary deploy via `bin/Release/MCP2.exe` plus its referenced DLLs (including the bundled SQLite native engine under `x86/`/`x64/`).
 
 ---
 

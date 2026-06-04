@@ -152,6 +152,22 @@ Full database access using the connection string from `mcp-config.json`. The too
 
 ---
 
+## SQLite Database (4 tools)
+
+Direct file-based access to SQLite databases. Unlike MySQL there's no connection string to configure — every tool takes a `database` file path, with direct physical access (no sandbox). Built primarily for Claude Code. The native SQLite engine is bundled in the binary, so there's nothing to install.
+
+**`sqlite_query`** is a single combined read+write tool. Pass one statement via `sql`, or several via `statements` (an array) which run **atomically in one transaction** — if any statement fails, the whole batch rolls back and the error names the offending statement. `SELECT` and `PRAGMA` reads return formatted rows; `INSERT`/`UPDATE`/`DELETE`/DDL report affected-row counts. Result sets are capped at `max_rows` (default **50**) with a truncation notice, so a `SELECT *` on a huge table can't blow up the response. The `format` param controls output: `ascii` (default), `json`, `csv`, or `markdown`. JSON emits **typed values** — numbers stay numbers, a database NULL becomes real `null` (BLOBs render as `[BLOB: N bytes]`).
+
+**`sqlite_schema`** reports columns (via `PRAGMA table_info`), indexes, and the `CREATE` statement for one or more tables. Pass `tables` as an array of names, or `["*"]` / omit it for every table. Same four output formats.
+
+**`sqlite_list_databases`** recursively discovers SQLite files under a `directory`, returning path, size, and last-modified time. Matches `.db`/`.sqlite`/`.sqlite3`/`.db3` by default; override with a custom `extensions` array. Set `recursive: false` to scan only the top folder.
+
+**`sqlite_create_database`** explicitly creates a new, empty database file — kept separate from `sqlite_query` so a typo'd path can't silently spawn a stray database. It refuses to overwrite an existing file unless `overwrite: true`; parent directories are created as needed.
+
+> `sqlite_query` · `sqlite_schema` · `sqlite_list_databases` · `sqlite_create_database`
+
+---
+
 ## HTTP (3 tools)
 
 **`http_get`** — simple GET with optional headers.
@@ -234,7 +250,7 @@ Remote server access via SSH and SFTP. Credentials are stored in `mcp-config.jso
 
 ---
 
-## Total: 59 tools
+## Total: 63 tools
 
 | Category | Count |
 |---|---|
@@ -245,10 +261,11 @@ Remote server access via SSH and SFTP. Credentials are stored in `mcp-config.jso
 | Backup & diff | 6 |
 | Batch read | 1 |
 | MySQL | 8 |
+| SQLite | 4 |
 | HTTP | 3 |
 | Zip | 5 |
 | Image | 1 |
 | Shell | 1 |
 | Build | 1 |
 | SSH | 5 |
-| **Total** | **59** |
+| **Total** | **63** |
